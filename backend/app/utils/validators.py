@@ -8,13 +8,14 @@ import os
 from werkzeug.datastructures import FileStorage
 
 
-def validate_log_file(file: FileStorage, config):
+def validate_log_file(file: FileStorage, config, allowed_extensions=None):
     """
     Validate uploaded log file
     
     Args:
         file: Uploaded file
         config: Application config
+        allowed_extensions: List of allowed extensions (overrides config)
     
     Returns:
         tuple: (is_valid, error_message)
@@ -23,7 +24,8 @@ def validate_log_file(file: FileStorage, config):
     max_size = config.get('MAX_UPLOAD_SIZE', 104857600)  # 100MB default
     
     # Check file extension
-    allowed_extensions = config.get('ALLOWED_LOG_EXTENSIONS', ['log', 'txt', 'json'])
+    if allowed_extensions is None:
+        allowed_extensions = config.get('ALLOWED_LOG_EXTENSIONS', ['log', 'txt', 'json', 'csv'])
     
     filename = file.filename
     if not filename:
@@ -35,7 +37,7 @@ def validate_log_file(file: FileStorage, config):
     
     extension = filename.rsplit('.', 1)[1].lower()
     if extension not in allowed_extensions:
-        return False, f"File extension '{extension}' not allowed. Allowed: {', '.join(allowed_extensions)}"
+        return False, f"File extension '.{extension}' not allowed. Allowed: {', '.join(['.' + ext for ext in allowed_extensions])}"
     
     # Try to read first few bytes to check if file is readable
     try:
@@ -44,7 +46,9 @@ def validate_log_file(file: FileStorage, config):
         file.stream.seek(0)
         
         if size > max_size:
-            return False, f"File size ({size} bytes) exceeds maximum allowed size ({max_size} bytes)"
+            size_mb = size / (1024 * 1024)
+            max_mb = max_size / (1024 * 1024)
+            return False, f"File size ({size_mb:.2f} MB) exceeds maximum allowed size ({max_mb:.2f} MB)"
         
         if size == 0:
             return False, "File is empty"

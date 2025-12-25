@@ -16,6 +16,9 @@ mongoengine==0.28.2
 redis==5.0.1
 flask-caching==2.1.0
 
+# Async Tasks
+celery==5.3.4
+
 # Data Processing & Validation
 pandas==2.1.4
 numpy==1.26.2

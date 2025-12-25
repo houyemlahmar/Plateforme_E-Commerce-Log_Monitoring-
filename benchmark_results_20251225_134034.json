@@ -1,0 +1,80 @@
+{
+  "timestamp": "2025-12-25T13:40:32.153147",
+  "services": {
+    "Flask API": {
+      "available": false,
+      "latency_ms": 0
+    },
+    "Elasticsearch": {
+      "available": true,
+      "latency_ms": 34.741878509521484
+    },
+    "Kibana": {
+      "available": true,
+      "latency_ms": 68.92776489257812
+    }
+  },
+  "upload_performance": [
+    {
+      "test": "Small JSON (10 lines)",
+      "duration_s": 0.772258996963501,
+      "throughput_kbps": 1.5149346004385802,
+      "file_size_bytes": 1198,
+      "lines": 10
+    },
+    {
+      "test": "Medium JSON (100 lines)",
+      "duration_s": 0.9323654174804688,
+      "throughput_kbps": 13.038074742036054,
+      "file_size_bytes": 12448,
+      "lines": 100
+    },
+    {
+      "test": "Large JSON (1000 lines)",
+      "duration_s": 0.49124908447265625,
+      "throughput_kbps": 254.9046576278557,
+      "file_size_bytes": 128227,
+      "lines": 1000
+    },
+    {
+      "test": "Small CSV (10 lines)",
+      "duration_s": 0.1278672218322754,
+      "throughput_kbps": 4.131788467203914,
+      "file_size_bytes": 541,
+      "lines": 11
+    },
+    {
+      "test": "Medium CSV (100 lines)",
+      "duration_s": 0.05582404136657715,
+      "throughput_kbps": 96.05726415054048,
+      "file_size_bytes": 5491,
+      "lines": 101
+    },
+    {
+      "test": "Large CSV (1000 lines)",
+      "duration_s": 0.0740811824798584,
+      "throughput_kbps": 766.8292444298546,
+      "file_size_bytes": 58171,
+      "lines": 1001
+    }
+  ],
+  "elasticsearch": {},
+  "overall": {
+    "avg_service_latency_ms": 51.834821701049805,
+    "avg_upload_throughput_kbps": 189.41266066965488
+  },
+  "capabilities": {
+    "✅ File Upload (CSV/JSON)": "Up to 100MB per file",
+    "✅ File Validation": "Extension, size, content checks",
+    "✅ Preview Generation": "First 10 lines extracted",
+    "✅ MongoDB Metadata": "Full tracking with status updates",
+    "✅ Redis Queue": "Async job processing",
+    "✅ Ingestion Service": "Auto-process with 3 retries",
+    "✅ Logstash Processing": "2 pipelines (JSON/CSV)",
+    "✅ GeoIP Enhancement": "Automatic IP geolocation",
+    "✅ Elasticsearch Storage": "Time-based indices",
+    "✅ Error Handling": "Dead Letter Queue + fallback",
+    "✅ Docker Deployment": "8 services orchestrated",
+    "✅ Health Checks": "All services monitored"
+  }
+}

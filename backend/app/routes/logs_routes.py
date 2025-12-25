@@ -17,43 +17,90 @@ bp = Blueprint('logs', __name__, url_prefix='/api/logs')
 @bp.route('/upload', methods=['POST'])
 def upload_logs():
     """
-    Upload log files
+    Upload log files (CSV or JSON)
+    - File validation (size, extension csv/json)
+    - Save file to /uploads
+    - Extract first 10 lines for preview
+    - Insert metadata into MongoDB collection "uploads"
+    - Push job ID into Redis queue "ingest_jobs"
     
     Returns:
-        JSON response with upload status
+        JSON response with upload status, preview, and job ID
     """
     try:
+        # Check if file is present
         if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'No file provided',
+                'message': 'Please upload a file'
+            }), 400
         
         file = request.files['file']
         
+        # Check if filename is empty
         if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'No file selected',
+                'message': 'Please select a file to upload'
+            }), 400
         
-        # Validate file
-        is_valid, error_message = validate_log_file(file, current_app.config)
+        # Validate file (size and extension csv/json only)
+        is_valid, error_message = validate_log_file(file, current_app.config, allowed_extensions=['csv', 'json'])
         if not is_valid:
-            return jsonify({'error': error_message}), 400
+            return jsonify({
+                'success': False,
+                'error': error_message,
+                'message': 'File validation failed'
+            }), 400
         
-        # Process log file
+        # Process log file with preview and queue job
         log_service = LogService(
             current_app.es_service,
             current_app.mongo_service,
             current_app.redis_service
         )
         
-        result = log_service.process_log_file(file)
+        result = log_service.process_upload_with_preview(file)
         
         return jsonify({
-            'message': 'Logs uploaded successfully',
-            'records_processed': result['records_processed'],
-            'file_id': result['file_id']
+            'success': True,
+            'message': 'File uploaded successfully',
+            'data': {
+                'file_id': result['file_id'],
+                'job_id': result['job_id'],
+                'filename': result['filename'],
+                'file_size': result['file_size'],
+                'file_type': result['file_type'],
+                'preview': result['preview'],
+                'preview_lines': len(result['preview']),
+                'total_lines': result['total_lines'],
+                'uploaded_at': result['uploaded_at']
+            }
         }), 201
         
+    except ValueError as e:
+        logger.error(f"Validation error uploading file: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Invalid file data'
+        }), 400
+    except IOError as e:
+        logger.error(f"IO error uploading file: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'File system error',
+            'message': 'Unable to save file'
+        }), 500
     except Exception as e:
-        logger.error(f"Error uploading logs: {str(e)}")
-        return jsonify({'error': 'Failed to upload logs'}), 500
+        logger.error(f"Unexpected error uploading logs: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'message': 'Failed to upload logs'
+        }), 500
 
 
 @bp.route('/ingest', methods=['POST'])

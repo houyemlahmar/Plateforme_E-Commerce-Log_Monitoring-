@@ -5,8 +5,11 @@ Handles Redis caching operations
 
 import logging
 import json
-import redis
-from redis.exceptions import RedisError
+try:
+    import redis  # type: ignore
+    from redis.exceptions import RedisError  # type: ignore
+except ImportError as e:
+    raise ImportError("Redis package not installed. Run: pip install redis") from e
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +167,131 @@ class RedisService:
         except RedisError as e:
             logger.error(f"Error setting expiration: {str(e)}")
             return False
+    
+    def lpush(self, key, *values):
+        """
+        Push values to the left (head) of a list
+        
+        Args:
+            key: List key
+            values: Values to push
+        
+        Returns:
+            int: Length of list after push
+        """
+        try:
+            return self.client.lpush(key, *values)
+            
+        except RedisError as e:
+            logger.error(f"Error pushing to list: {str(e)}")
+            return None
+    
+    def rpush(self, key, *values):
+        """
+        Push values to the right (tail) of a list
+        
+        Args:
+            key: List key
+            values: Values to push
+        
+        Returns:
+            int: Length of list after push
+        """
+        try:
+            return self.client.rpush(key, *values)
+            
+        except RedisError as e:
+            logger.error(f"Error pushing to list: {str(e)}")
+            return None
+    
+    def lpop(self, key):
+        """
+        Pop value from the left (head) of a list
+        
+        Args:
+            key: List key
+        
+        Returns:
+            Value or None if list is empty
+        """
+        try:
+            value = self.client.lpop(key)
+            if value:
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            return None
+            
+        except RedisError as e:
+            logger.error(f"Error popping from list: {str(e)}")
+            return None
+    
+    def rpop(self, key):
+        """
+        Pop value from the right (tail) of a list
+        
+        Args:
+            key: List key
+        
+        Returns:
+            Value or None if list is empty
+        """
+        try:
+            value = self.client.rpop(key)
+            if value:
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            return None
+            
+        except RedisError as e:
+            logger.error(f"Error popping from list: {str(e)}")
+            return None
+    
+    def llen(self, key):
+        """
+        Get length of a list
+        
+        Args:
+            key: List key
+        
+        Returns:
+            int: Length of list
+        """
+        try:
+            return self.client.llen(key)
+            
+        except RedisError as e:
+            logger.error(f"Error getting list length: {str(e)}")
+            return 0
+    
+    def lrange(self, key, start=0, end=-1):
+        """
+        Get range of elements from a list
+        
+        Args:
+            key: List key
+            start: Start index
+            end: End index (-1 for all)
+        
+        Returns:
+            list: List elements
+        """
+        try:
+            values = self.client.lrange(key, start, end)
+            result = []
+            for value in values:
+                try:
+                    result.append(json.loads(value))
+                except (json.JSONDecodeError, TypeError):
+                    result.append(value)
+            return result
+            
+        except RedisError as e:
+            logger.error(f"Error getting list range: {str(e)}")
+            return []
     
     def flush_all(self):
         """

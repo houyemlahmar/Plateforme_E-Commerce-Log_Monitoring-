@@ -5,6 +5,9 @@ Handles log processing, ingestion, and management
 
 import logging
 import json
+import os
+import csv
+import uuid
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
@@ -26,6 +29,121 @@ class LogService:
         self.es_service = es_service
         self.mongo_service = mongo_service
         self.redis_service = redis_service
+    
+    def process_upload_with_preview(self, file):
+        """
+        Process uploaded file with preview and queue job
+        - Save file to /uploads
+        - Extract first 10 lines for preview
+        - Insert metadata into MongoDB collection "uploads"
+        - Push job ID into Redis queue "ingest_jobs"
+        
+        Args:
+            file: Uploaded file object
+        
+        Returns:
+            dict: Processing result with preview and job ID
+        """
+        try:
+            filename = secure_filename(file.filename)
+            file_extension = filename.rsplit('.', 1)[1].lower()
+            
+            # Generate unique job ID
+            job_id = str(uuid.uuid4())
+            
+            # Create uploads directory if not exists
+            uploads_dir = os.path.join(os.getcwd(), 'uploads')
+            os.makedirs(uploads_dir, exist_ok=True)
+            
+            # Save file with unique name
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            unique_filename = f"{timestamp}_{job_id[:8]}_{filename}"
+            file_path = os.path.join(uploads_dir, unique_filename)
+            
+            # Read file content
+            content = file.read().decode('utf-8')
+            file_size = len(content.encode('utf-8'))
+            
+            # Save to disk
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # Extract first 10 lines for preview
+            lines = content.strip().split('\n')
+            preview_lines = lines[:10]
+            total_lines = len(lines)
+            
+            # Parse preview based on file type
+            preview = []
+            if file_extension == 'json':
+                for line in preview_lines:
+                    try:
+                        preview.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        preview.append({'raw': line, 'error': 'Invalid JSON'})
+            elif file_extension == 'csv':
+                try:
+                    csv_reader = csv.DictReader(preview_lines)
+                    preview = list(csv_reader)
+                except Exception as e:
+                    logger.warning(f"CSV parsing error: {str(e)}")
+                    preview = [{'raw': line} for line in preview_lines]
+            else:
+                preview = [{'line': i+1, 'content': line} for i, line in enumerate(preview_lines)]
+            
+            # Store metadata in MongoDB collection "uploads"
+            uploaded_at = datetime.utcnow()
+            upload_metadata = {
+                'job_id': job_id,
+                'filename': filename,
+                'unique_filename': unique_filename,
+                'file_path': file_path,
+                'file_size': file_size,
+                'file_type': file_extension,
+                'total_lines': total_lines,
+                'preview': preview[:10],  # Store first 10 lines
+                'uploaded_at': uploaded_at,
+                'status': 'pending',
+                'processed': False
+            }
+            
+            # Insert into MongoDB "uploads" collection
+            file_id = self.mongo_service.insert_one('uploads', upload_metadata)
+            
+            # Push job ID into Redis queue "ingest_jobs"
+            job_data = {
+                'job_id': job_id,
+                'file_id': str(file_id),
+                'file_path': file_path,
+                'file_type': file_extension,
+                'total_lines': total_lines,
+                'created_at': uploaded_at.isoformat()
+            }
+            
+            # Push to Redis queue
+            self.redis_service.lpush('ingest_jobs', json.dumps(job_data))
+            logger.info(f"Job {job_id} pushed to ingest_jobs queue")
+            
+            return {
+                'file_id': str(file_id),
+                'job_id': job_id,
+                'filename': filename,
+                'file_size': file_size,
+                'file_type': file_extension,
+                'preview': preview,
+                'total_lines': total_lines,
+                'uploaded_at': uploaded_at.isoformat()
+            }
+            
+        except UnicodeDecodeError as e:
+            logger.error(f"File encoding error: {str(e)}")
+            raise ValueError("File must be UTF-8 encoded")
+        except IOError as e:
+            logger.error(f"File I/O error: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error processing upload with preview: {str(e)}", exc_info=True)
+            raise
     
     def process_log_file(self, file):
         """

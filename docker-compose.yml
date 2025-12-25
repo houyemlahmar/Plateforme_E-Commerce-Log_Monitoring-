@@ -1,5 +1,8 @@
+# E-Commerce Log Monitoring Platform - Docker Compose
+# All services with health checks and Windows-compatible volumes
+
 services:
-  # Elasticsearch
+  # Elasticsearch 8.11 - Search and Analytics
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     container_name: elasticsearch
@@ -11,6 +14,7 @@ services:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - xpack.security.enabled=false
       - xpack.security.enrollment.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
     ulimits:
       memlock:
         soft: -1
@@ -29,14 +33,18 @@ services:
       timeout: 10s
       retries: 5
 
-  # Logstash
+  # Logstash 8.11 - Data Processing Pipeline
   logstash:
     image: docker.elastic.co/logstash/logstash:8.11.0
     container_name: logstash
-    command: logstash -f /usr/share/logstash/pipeline/ecommerce-logs.conf
+    # Pipeline selection: pipeline_json.conf (JSON files) or pipeline_csv.conf (CSV files)
+    # Default: JSON pipeline for batch processing of JSON log files
+    command: logstash -f /usr/share/logstash/pipeline/pipeline_json.conf
     volumes:
       - ./infra/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
       - ./infra/logstash/pipelines/:/usr/share/logstash/pipeline/
+      - ./uploads:/data/uploads                                    # CSV input files
+      - ./data/logstash/dlq:/data/logstash/dead_letter_queue      # Failed logs output
     ports:
       - "5000:5000/tcp"
       - "5000:5000/udp"
@@ -44,13 +52,20 @@ services:
       - "9600:9600"
     environment:
       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
+      - ELASTICSEARCH_HOSTS=${ELASTICSEARCH_HOSTS:-http://elasticsearch:9200}
     networks:
       - elk-network
     depends_on:
       elasticsearch:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
-  # Kibana
+  # Kibana 8.11 - Visualization Platform
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
     container_name: kibana
@@ -60,20 +75,28 @@ services:
       - "5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=${KIBANA_SERVER_NAME:-kibana}
+      - SERVER_HOST=0.0.0.0
     networks:
       - elk-network
     depends_on:
       elasticsearch:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
-  # MongoDB
+  # MongoDB 7 - Document Database
   mongodb:
     image: mongo:7.0
     container_name: mongodb
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=changeme
-      - MONGO_INITDB_DATABASE=ecommerce_logs
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-changeme}
+      - MONGO_INITDB_DATABASE=${MONGO_DATABASE:-ecommerce_logs}
     volumes:
       - mongodb-data:/data/db
       - ./infra/mongodb/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
@@ -81,32 +104,54 @@ services:
       - "27017:27017"
     networks:
       - elk-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-  # Redis
+  # Redis 7 - Cache and Message Broker
   redis:
     image: redis:7-alpine
     container_name: redis
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
     volumes:
       - redis-data:/data
     ports:
       - "6379:6379"
     networks:
       - elk-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
-  # Flask Application
+  # Flask Web Application
   flask-app:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: flask-app
     environment:
-      - FLASK_ENV=development
-      - ELASTICSEARCH_HOST=elasticsearch
-      - MONGODB_HOST=mongodb
-      - REDIS_HOST=redis
-      - LOGSTASH_HOST=logstash
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - PORT=5000
+      - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-elasticsearch}
+      - ELASTICSEARCH_PORT=${ELASTICSEARCH_PORT:-9200}
+      - MONGODB_HOST=${MONGODB_HOST:-mongodb}
+      - MONGODB_PORT=${MONGODB_PORT:-27017}
+      - MONGODB_USERNAME=${MONGO_USERNAME:-admin}
+      - MONGODB_PASSWORD=${MONGO_PASSWORD:-changeme}
+      - MONGODB_DATABASE=${MONGO_DATABASE:-ecommerce_logs}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - LOGSTASH_HOST=${LOGSTASH_HOST:-logstash}
+      - LOGSTASH_PORT=${LOGSTASH_PORT:-5000}
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
@@ -115,10 +160,80 @@ services:
     networks:
       - elk-network
     depends_on:
-      - elasticsearch
-      - mongodb
-      - redis
-      - logstash
+      elasticsearch:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      logstash:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Worker for Async Tasks
+  ingest_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: celery-worker
+    command: python -m celery -A app.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-elasticsearch}
+      - ELASTICSEARCH_PORT=${ELASTICSEARCH_PORT:-9200}
+      - MONGODB_HOST=${MONGODB_HOST:-mongodb}
+      - MONGODB_PORT=${MONGODB_PORT:-27017}
+      - MONGODB_USERNAME=${MONGO_USERNAME:-admin}
+      - MONGODB_PASSWORD=${MONGO_PASSWORD:-changeme}
+      - MONGODB_DATABASE=${MONGO_DATABASE:-ecommerce_logs}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+    volumes:
+      - ./backend:/app
+    networks:
+      - elk-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # Ingestion Service - Process Upload Queue
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion
+    container_name: ingestion-service
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGO_USERNAME=${MONGO_USERNAME:-admin}
+      - MONGO_PASSWORD=${MONGO_PASSWORD:-changeme}
+      - MONGODB_DATABASE=${MONGO_DATABASE:-ecommerce_logs}
+    networks:
+      - elk-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   elasticsearch-data:

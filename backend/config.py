@@ -66,7 +66,7 @@ class Config:
     
     # Application Configuration
     MAX_UPLOAD_SIZE = int(os.getenv('MAX_UPLOAD_SIZE', 104857600))  # 100MB
-    ALLOWED_LOG_EXTENSIONS = os.getenv('ALLOWED_LOG_EXTENSIONS', 'log,txt,json').split(',')
+    ALLOWED_LOG_EXTENSIONS = os.getenv('ALLOWED_LOG_EXTENSIONS', 'log,txt,json,csv').split(',')
     LOGS_RETENTION_DAYS = int(os.getenv('LOGS_RETENTION_DAYS', 90))
     
     # Security Configuration

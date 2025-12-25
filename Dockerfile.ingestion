@@ -1,0 +1,17 @@
+# Dockerfile for Ingestion Service
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY backend/ .
+
+# Copy .env file
+COPY .env .env
+
+# Run ingestion service
+CMD ["python", "ingestion_service.py"]
