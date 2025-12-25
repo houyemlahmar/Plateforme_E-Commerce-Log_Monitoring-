@@ -133,7 +133,7 @@ class ElasticsearchService:
         Args:
             index_name: Name of the index
             query: Elasticsearch query
-            size: Number of results
+            size: Number of results (only used if not already in query)
         
         Returns:
             dict: Search results
@@ -141,11 +141,18 @@ class ElasticsearchService:
         try:
             full_index_name = f"{self.index_prefix}-{index_name}"
             
-            result = self.client.search(
-                index=full_index_name,
-                body=query,
-                size=size
-            )
+            # Only pass size parameter if not already in query body
+            if 'size' in query:
+                result = self.client.search(
+                    index=full_index_name,
+                    body=query
+                )
+            else:
+                result = self.client.search(
+                    index=full_index_name,
+                    body=query,
+                    size=size
+                )
             
             return result
             

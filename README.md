@@ -162,6 +162,12 @@ python benchmark.py
 | **GeoIP enrichment** | IP → Geo coordinates | ✅ |
 | **Error handling** | DLQ + fallback index | ✅ |
 | **Status updates** | pending → processing → completed | ✅ |
+| **Query Builder ES** | Filtres multiples + sanitization | ✅ **NEW!** |
+| **Recherche avancée** | 10+ paramètres combinables | ✅ **NEW!** |
+| **Cache Redis** | TTL 60s pour performances | ✅ **NEW!** |
+| **Historique MongoDB** | search_history collection | ✅ **NEW!** |
+| **Pagination** | Page 1-∞, size 1-1000 | ✅ **NEW!** |
+| **Sécurité inputs** | XSS, injection, validation | ✅ **NEW!** |
 
 ---
 
@@ -225,6 +231,164 @@ curl -X POST http://localhost:5001/api/logs/upload \
 
 ---
 
+### Recherche Elasticsearch (Query Builder)
+
+#### GET /api/search
+Recherche avancée avec Query Builder Elasticsearch - supporte filtres multiples, pagination, tri, sanitization complète, **cache Redis (TTL 60s)**, et **historique MongoDB**.
+
+**🚀 Fonctionnalités** :
+- ✅ **Query Builder DSL** : Construction sécurisée de queries ES
+- ✅ **Cache Redis** : TTL 60 secondes pour réduire la charge ES
+- ✅ **Historique MongoDB** : Sauvegarde automatique des recherches (collection `search_history`)
+- ✅ **Pagination avancée** : Pages 1-∞, size 1-1000
+- ✅ **Multi-filtres** : 10+ paramètres combinables
+- ✅ **Sanitization** : Protection contre SQL injection, XSS, inputs malveillants
+
+**Query Parameters** :
+
+| Paramètre | Type | Description | Exemple |
+|-----------|------|-------------|---------|
+| `q` | string | Recherche texte libre (multi-champs) | `error timeout` |
+| `level` | string | Niveau de log | `ERROR`, `WARNING`, `INFO` |
+| `service` | string | Nom du service | `payment`, `checkout` |
+| `log_type` | string | Type de log | `transaction`, `error`, `fraud` |
+| `date_from` | string | Date début (ISO 8601) | `2025-12-01` ou `2025-12-01T10:00:00` |
+| `date_to` | string | Date fin (ISO 8601) | `2025-12-31` |
+| `user_id` | string | ID utilisateur | `USER123` |
+| `min_amount` | float | Montant minimum | `100.00` |
+| `max_amount` | float | Montant maximum | `1000.00` |
+| `page` | int | Numéro de page (1-indexed) | `2` |
+| `size` | int | Résultats par page (max 1000) | `50` |
+| `sort_field` | string | Champ de tri | `@timestamp`, `amount` |
+| `sort_order` | string | Ordre de tri | `asc`, `desc` |
+
+**Exemples d'utilisation** :
+
+```bash
+# 1. Recherche simple
+GET /api/search?q=timeout
+
+# 2. Filtrer par niveau ERROR
+GET /api/search?level=ERROR&size=50
+
+# 3. Logs du service payment en décembre
+GET /api/search?service=payment&date_from=2025-12-01&date_to=2025-12-31
+
+# 4. Recherche combinée avec pagination
+GET /api/search?q=timeout&level=ERROR&service=payment&page=2&size=20
+
+# 5. Transactions par montant
+GET /api/search?log_type=transaction&min_amount=100&max_amount=1000&sort_field=amount&sort_order=desc
+
+# 6. Logs d'un utilisateur spécifique
+GET /api/search?user_id=USER123&date_from=2025-12-20
+
+# 7. Fraudes détectées
+GET /api/search?log_type=fraud&sort_field=@timestamp&sort_order=desc
+```
+
+**Response (200 OK)** :
+```json
+{
+  "success": true,
+  "data": {
+    "total": 156,
+    "page": 1,
+    "page_size": 20,
+    "total_pages": 8,
+    "cached": false,
+    "results": [
+      {
+        "id": "abc123",
+        "score": 4.5,
+        "source": {
+          "@timestamp": "2025-12-25T10:30:00Z",
+          "level": "ERROR",
+          "service": "payment",
+          "message": "Payment timeout after 30s",
+          "user_id": "USER456",
+          "amount": 99.99
+        },
+        "highlight": {
+          "message": ["Payment <mark>timeout</mark> after 30s"]
+        }
+      }
+    ],
+    "query": "timeout",
+    "filters": {
+      "level": "ERROR",
+      "service": "payment",
+      "start_date": "2025-12-01",
+      "end_date": "2025-12-31"
+    },
+    "sort": {
+      "field": "@timestamp",
+      "order": "desc"
+    }
+  }
+}
+```
+
+**⚡ Cache & Performance** :
+- **Cache Redis** : TTL 60 secondes basé sur hash des paramètres
+- **Cache HIT** : `cached: true` dans la réponse
+- **Cache MISS** : Query exécutée sur ES, résultats mis en cache
+- **Cache key** : `search:<md5_hash_params>` (garantit unicité)
+- **Invalidation** : Automatique après 60s
+
+**📊 Historique des Recherches (MongoDB)** :
+```javascript
+// Collection: search_history
+{
+  "timestamp": ISODate("2025-12-25T10:30:00Z"),
+  "query": "timeout",
+  "filters": {
+    "log_type": "error",
+    "level": "ERROR",
+    "service": "payment",
+    "start_date": "2025-12-01",
+    "end_date": "2025-12-31"
+  },
+  "pagination": {
+    "page": 1,
+    "size": 20
+  },
+  "results_count": 156,
+  "user_ip": "192.168.1.100"
+}
+```
+
+**Utilité de l'historique** :
+- 📈 Analyser les patterns de recherche utilisateurs
+- 🔍 Identifier les requêtes fréquentes (optimisation cache)
+- 🐛 Debug : comprendre les recherches qui échouent
+- 📊 Métriques : top queries, services les plus recherchés
+
+**Sécurité & Sanitization** :
+- ✅ **Injection SQL** : Paramètres sanitisés et validés
+- ✅ **XSS** : Caractères spéciaux échappés
+- ✅ **Texte limité** : Max 500 caractères pour free text
+- ✅ **Validation dates** : Formats ISO 8601 uniquement
+- ✅ **Pagination bornée** : Size max 1000, page min 1
+- ✅ **Niveaux validés** : Liste whitelist (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- ✅ **Fallbacks sûrs** : Valeurs par défaut si invalides
+
+**Tests disponibles** :
+```powershell
+# Tester l'API de recherche
+python test_query_builder_api.py
+
+# Tests incluent:
+# - Recherche basique
+# - Filtres combinés
+# - Pagination
+# - Tri personnalisé
+# - Sécurité (injection, XSS)
+# - Edge cases (unicode, texte long)
+```
+
+---
+
 ## 📁 Structure du Projet (Nettoyée)
 
 ```
@@ -234,18 +398,20 @@ projet_bigdata/
 │   ├── app/
 │   │   ├── routes/
 │   │   │   ├── logs_routes.py         # ✅ POST /upload endpoint
-│   │   │   ├── search_routes.py       # Recherche ES
+│   │   │   ├── search_routes.py       # ✅ GET /search (Query Builder)
 │   │   │   ├── analytics_routes.py    # Agrégations
 │   │   │   ├── dashboard_routes.py    # Métriques
 │   │   │   └── fraud_routes.py        # Détection fraude
 │   │   ├── services/
 │   │   │   ├── log_service.py         # ✅ Upload logic + preview
+│   │   │   ├── search_service.py      # ✅ Search avec Query Builder
 │   │   │   ├── redis_service.py       # ✅ Queue methods
 │   │   │   ├── mongodb_service.py     # ✅ Metadata CRUD
 │   │   │   ├── elasticsearch_service.py
 │   │   │   └── analytics_service.py
 │   │   ├── utils/
 │   │   │   ├── validators.py          # ✅ File validation
+│   │   │   ├── query_builder.py       # ✅ ES Query Builder (NEW!)
 │   │   │   ├── helpers.py
 │   │   │   └── formatters.py
 │   │   ├── models/                    # MongoDB schemas
@@ -271,7 +437,8 @@ projet_bigdata/
 ├── Dockerfile.ingestion               # ✅ Image ingestion
 ├── .env                               # Configuration
 │
-├── test_upload_endpoint.py            # ✅ Tests API
+├── test_upload_endpoint.py            # ✅ Tests upload API
+├── test_query_builder_api.py          # ✅ Tests Query Builder (NEW!)
 ├── benchmark.py                       # ✅ Benchmark
 │
 └── README.md                          # ⭐ Ce fichier
