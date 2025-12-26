@@ -15,6 +15,40 @@ bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 dashboard_view_bp = Blueprint('dashboard_view', __name__)
 
 
+@dashboard_view_bp.route('/kibana', methods=['GET'])
+def kibana_view():
+    """
+    Render Kibana dashboard embedded in iframe (accessible at /kibana)
+    
+    Returns:
+        Rendered Kibana iframe page with security headers
+    """
+    try:
+        # Get Kibana URL from config
+        config = get_config()
+        kibana_url = config.KIBANA_URL if hasattr(config, 'KIBANA_URL') else 'http://localhost:5601'
+        
+        # Dashboard ID from the imported dashboard
+        dashboard_id = 'ecommerce-logs-dashboard'
+        kibana_dashboard_url = f"{kibana_url}/app/dashboards#/view/{dashboard_id}"
+        
+        # Render template
+        response = render_template('kibana.html', kibana_url=kibana_dashboard_url)
+        
+        # Note: X-Frame-Options headers are intentionally not set here
+        # to allow Kibana iframe embedding. Ensure Kibana is configured
+        # with server.cors.enabled: true in kibana.yml
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error rendering Kibana page: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to load Kibana dashboard'
+        }), 500
+
+
 @dashboard_view_bp.route('/dashboard', methods=['GET'])
 def dashboard_html():
     """

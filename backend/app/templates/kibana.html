@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Kibana Dashboard - E-commerce Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kibana-container {
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 80px);
+        overflow: hidden;
+    }
+    
+    .kibana-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        transition: opacity 0.5s ease-out;
+    }
+    
+    .loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .loading-text {
+        color: white;
+        margin-top: 20px;
+        font-size: 18px;
+        font-weight: 500;
+    }
+    
+    .error-message {
+        display: none;
+        background: #fee;
+        border: 1px solid #fcc;
+        color: #c33;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .info-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .info-banner i {
+        margin-right: 10px;
+    }
+    
+    .refresh-button {
+        background: white;
+        color: #667eea;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: transform 0.2s;
+    }
+    
+    .refresh-button:hover {
+        transform: scale(1.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-chart-line mr-2"></i>Kibana Dashboard
+            </h1>
+            <p class="text-gray-600">Visualisations en temps réel des logs e-commerce</p>
+        </div>
+        <button onclick="refreshDashboard()" class="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl">
+            <i class="fas fa-sync-alt mr-2"></i>Rafraîchir
+        </button>
+    </div>
+    
+    <div class="error-message" id="errorMessage">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        <span id="errorText"></span>
+    </div>
+    
+    <div class="info-banner">
+        <div>
+            <i class="fas fa-info-circle"></i>
+            <strong>Dashboard E-commerce Logs:</strong> Logs par heure, Top erreurs, Distribution des montants
+        </div>
+        <button onclick="openInKibana()" class="refresh-button">
+            <i class="fas fa-external-link-alt mr-2"></i>Ouvrir dans Kibana
+        </button>
+    </div>
+    
+    <div class="kibana-container">
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div class="loading-text">Chargement du dashboard Kibana...</div>
+        </div>
+        <iframe 
+            id="kibanaIframe"
+            class="kibana-iframe"
+            src="{{ kibana_url }}"
+            allow="fullscreen"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            title="Kibana Dashboard"
+            onload="hideLoading()"
+            onerror="showError()">
+        </iframe>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let iframeLoaded = false;
+    
+    // Hide loading overlay when iframe loads
+    function hideLoading() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                iframeLoaded = true;
+            }, 1000);
+        }
+    }
+    
+    // Show error message if iframe fails to load
+    function showError() {
+        const errorMsg = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const overlay = document.getElementById('loadingOverlay');
+        
+        if (errorMsg && errorText && overlay) {
+            overlay.classList.add('hidden');
+            errorText.textContent = 'Impossible de charger le dashboard Kibana. Vérifiez que Kibana est accessible.';
+            errorMsg.style.display = 'block';
+        }
+    }
+    
+    // Refresh dashboard by reloading iframe
+    function refreshDashboard() {
+        const iframe = document.getElementById('kibanaIframe');
+        const overlay = document.getElementById('loadingOverlay');
+        
+        if (iframe && overlay) {
+            overlay.classList.remove('hidden');
+            iframe.src = iframe.src;
+        }
+    }
+    
+    // Open dashboard directly in Kibana
+    function openInKibana() {
+        const kibanaUrl = "{{ kibana_url }}";
+        window.open(kibanaUrl, '_blank');
+    }
+    
+    // Auto-hide loading after 10 seconds if iframe doesn't load
+    setTimeout(() => {
+        if (!iframeLoaded) {
+            console.warn('Iframe loading timeout - hiding overlay');
+            hideLoading();
+        }
+    }, 10000);
+    
+    // Handle iframe communication errors
+    window.addEventListener('error', function(e) {
+        if (e.target.tagName === 'IFRAME') {
+            showError();
+        }
+    }, true);
+</script>
+{% endblock %}

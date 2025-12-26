@@ -8,6 +8,15 @@ elasticsearch.hosts: ["http://elasticsearch:9200"]
 xpack.security.enabled: false
 xpack.encryptedSavedObjects.encryptionKey: "something_at_least_32_characters_long"
 
+# Allow embedding in iframes (disable X-Frame-Options)
+server.customResponseHeaders:
+  X-Frame-Options: "ALLOWALL"
+
+# CORS configuration to allow iframe embedding
+server.cors.enabled: true
+server.cors.allowOrigin: ["http://localhost:5000", "http://127.0.0.1:5000"]
+server.cors.allowCredentials: true
+
 # Monitoring
 monitoring.ui.container.elasticsearch.enabled: true
 
