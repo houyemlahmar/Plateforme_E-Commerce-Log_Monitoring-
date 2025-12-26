@@ -91,8 +91,11 @@ def register_blueprints(app):
     )
     
     app.register_blueprint(logs_routes.bp)
+    app.register_blueprint(logs_routes.upload_view_bp)  # Register upload page route
+    app.register_blueprint(logs_routes.search_view_bp)  # Register search page route
     app.register_blueprint(analytics_routes.bp)
     app.register_blueprint(dashboard_routes.bp)
+    app.register_blueprint(dashboard_routes.dashboard_view_bp)  # Register HTML dashboard route
     app.register_blueprint(fraud_routes.bp)
     app.register_blueprint(performance_routes.bp)
     app.register_blueprint(search_routes.bp)

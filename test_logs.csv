@@ -1,0 +1,11 @@
+timestamp,level,service,message,user_id,ip_address,request_id,transaction_id,amount,currency,database,error_code,retry_count,recipient,email_type,status_code,endpoint,requests_per_second,cache_key,ttl,order_id,customer_id,total_amount,product_id,requested_quantity,available_quantity,risk_score,flags,query,results_count,execution_time_ms
+2025-12-25T10:15:30.000Z,INFO,auth-service,User login successful,user_12345,192.168.1.100,req_abc123,,,,,,,,,,,,,,,,,,,,,,,,
+2025-12-25T10:16:45.000Z,WARNING,payment-service,Payment processing delayed,,,req_def456,txn_789xyz,99.99,USD,,,,,,,,,,,,,,,,,,,,,
+2025-12-25T10:17:22.000Z,ERROR,database-service,Connection timeout to database,,,req_ghi789,,,,users_db,DB_TIMEOUT,3,,,,,,,,,,,,,,,,,,
+2025-12-25T10:18:10.000Z,INFO,notification-service,Email sent successfully,,,req_jkl012,,,,,,,,user@example.com,confirmation,,,,,,,,,,,,,,,
+2025-12-25T10:19:55.000Z,CRITICAL,api-gateway,Service unavailable - too many requests,,,req_mno345,,,,,,,,,503,/api/v1/orders,5000,,,,,,,,,,,,
+2025-12-25T10:20:33.000Z,DEBUG,cache-service,Cache miss for key,,,req_pqr678,,,,,,,,,,,,,user_profile_12345,300,,,,,,,,,
+2025-12-25T10:21:18.000Z,INFO,order-service,Order created successfully,,,req_stu901,,,,,,,,,,,,,,,order_98765,cust_54321,149.99,,,,,,,,
+2025-12-25T10:22:40.000Z,ERROR,inventory-service,Product out of stock,,,req_vwx234,,,,,,,,,,,,,,,,,prod_11111,5,0,,,,,
+2025-12-25T10:23:55.000Z,WARNING,fraud-detection,Suspicious activity detected,user_99999,,req_yza567,,,,,,,,,,,,,,,,,,,85,"multiple_ips,high_velocity",,,
+2025-12-25T10:24:12.000Z,INFO,search-service,Search query executed,,,req_bcd890,,,,,,,,,,,,,,,,,,,,,,winter jackets,47,23

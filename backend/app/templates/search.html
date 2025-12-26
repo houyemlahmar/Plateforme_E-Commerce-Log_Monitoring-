@@ -1,0 +1,542 @@
+{% extends "base.html" %}
+
+{% block title %}Search Logs - E-commerce{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+    .card-shadow {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    .filter-badge { transition: all 0.3s ease; }
+    .filter-badge:hover { transform: translateY(-2px); }
+    .log-row:hover { background-color: #f9fafb; cursor: pointer; }
+    .level-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .level-debug { background-color: #dbeafe; color: #1e40af; }
+    .level-info { background-color: #d1fae5; color: #065f46; }
+    .level-warning { background-color: #fef3c7; color: #92400e; }
+    .level-error { background-color: #fee2e2; color: #991b1b; }
+    .level-critical { background-color: #fae8ff; color: #86198f; }
+    .spinner {
+        border: 3px solid #f3f4f6;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+    
+    <!-- Search Section -->
+    <div class="bg-white rounded-xl p-6 card-shadow mb-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+            <i class="fas fa-filter text-purple-600 mr-3"></i>
+            Search & Filters
+        </h2>
+        
+        <!-- Free Text Search -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                <i class="fas fa-keyboard mr-2"></i>Free Text Search
+            </label>
+            <div class="relative">
+                <input type="text" 
+                       id="searchText" 
+                       placeholder="Search in logs: message, service, user_id, etc..."
+                       class="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                <i class="fas fa-search absolute left-4 top-4 text-gray-400"></i>
+            </div>
+        </div>
+
+        <!-- Filters Row -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            
+            <!-- Log Level Filter -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-layer-group mr-2"></i>Log Level
+                </label>
+                <select id="logLevel" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <option value="">All Levels</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                </select>
+            </div>
+
+            <!-- Service Filter -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-server mr-2"></i>Service / Application
+                </label>
+                <select id="serviceFilter" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <option value="">All Services</option>
+                </select>
+            </div>
+
+            <!-- Size Limit -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-list-ol mr-2"></i>Results Limit
+                </label>
+                <select id="sizeLimit" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <option value="50">50 results</option>
+                    <option value="100" selected>100 results</option>
+                    <option value="200">200 results</option>
+                    <option value="500">500 results</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Date Range Picker -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                <i class="far fa-calendar-alt mr-2"></i>Date Range
+            </label>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="relative">
+                    <input type="text" id="dateFrom" placeholder="From date"
+                           class="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <i class="far fa-calendar absolute left-4 top-4 text-gray-400"></i>
+                </div>
+                <div class="relative">
+                    <input type="text" id="dateTo" placeholder="To date"
+                           class="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <i class="far fa-calendar absolute left-4 top-4 text-gray-400"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Date Filters -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                <i class="fas fa-clock mr-2"></i>Quick Filters
+            </label>
+            <div class="flex flex-wrap gap-2">
+                <button onclick="setQuickDate('1h')" class="filter-badge bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition">
+                    Last Hour
+                </button>
+                <button onclick="setQuickDate('24h')" class="filter-badge bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition">
+                    Last 24 Hours
+                </button>
+                <button onclick="setQuickDate('7d')" class="filter-badge bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition">
+                    Last 7 Days
+                </button>
+                <button onclick="setQuickDate('30d')" class="filter-badge bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition">
+                    Last 30 Days
+                </button>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-4">
+            <button onclick="performSearch()" 
+                    class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition duration-200 flex items-center space-x-2 font-semibold">
+                <i class="fas fa-search"></i>
+                <span>Search</span>
+            </button>
+            <button onclick="viewInTable()" 
+                    class="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-8 py-3 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition duration-200 flex items-center space-x-2 font-semibold">
+                <i class="fas fa-table"></i>
+                <span>View in Table</span>
+            </button>
+            <button onclick="resetFilters()" 
+                    class="bg-gray-200 text-gray-700 px-8 py-3 rounded-lg hover:bg-gray-300 transition duration-200 flex items-center space-x-2 font-semibold">
+                <i class="fas fa-redo"></i>
+                <span>Reset</span>
+            </button>
+            <button onclick="saveSearch()" 
+                    class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition duration-200 flex items-center space-x-2">
+                <i class="fas fa-save"></i>
+                <span>Save Search</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Recent Searches -->
+    <div class="bg-white rounded-xl p-6 card-shadow mb-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
+            <span>
+                <i class="fas fa-history text-purple-600 mr-2"></i>
+                Recent Searches
+            </span>
+            <button onclick="loadRecentSearches()" class="text-sm text-purple-600 hover:text-purple-700">
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+        </h3>
+        <div id="recentSearches" class="flex flex-wrap gap-2">
+            <!-- Will be populated dynamically -->
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="bg-white rounded-xl p-6 card-shadow">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-list text-purple-600 mr-2"></i>
+                Search Results
+                <span id="resultsCount" class="text-sm text-gray-500 font-normal ml-2">(0 results)</span>
+            </h3>
+            <div class="flex items-center space-x-4">
+                <button onclick="exportResults('json')" class="text-sm text-purple-600 hover:text-purple-700 flex items-center space-x-1">
+                    <i class="fas fa-download"></i>
+                    <span>Export JSON</span>
+                </button>
+                <button onclick="exportResults('csv')" class="text-sm text-purple-600 hover:text-purple-700 flex items-center space-x-1">
+                    <i class="fas fa-file-csv"></i>
+                    <span>Export CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="hidden text-center py-12">
+            <div class="spinner mx-auto mb-4"></div>
+            <p class="text-gray-500">Searching logs...</p>
+        </div>
+
+        <!-- No Results Message -->
+        <div id="noResults" class="hidden text-center py-12">
+            <i class="fas fa-search text-6xl text-gray-300 mb-4"></i>
+            <p class="text-gray-500 text-lg">No results found. Try adjusting your filters.</p>
+        </div>
+
+        <!-- Results Table -->
+        <div id="resultsContainer" class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Timestamp</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Level</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Service</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Message</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTable" class="bg-white divide-y divide-gray-200">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Log Detail Modal -->
+<div id="logDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-4 flex items-center justify-between">
+            <h3 class="text-xl font-bold"><i class="fas fa-info-circle mr-2"></i>Log Details</h3>
+            <button onclick="closeModal()" class="text-white hover:text-gray-200 transition">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        <div id="logDetailContent" class="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+    let currentResults = [];
+    let services = [];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeDatePickers();
+        loadServices();
+        loadRecentSearches();
+        setQuickDate('24h');
+    });
+
+    function initializeDatePickers() {
+        flatpickr("#dateFrom", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true });
+        flatpickr("#dateTo", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true, defaultDate: new Date() });
+    }
+
+    function setQuickDate(period) {
+        const now = new Date();
+        const to = now.toISOString().slice(0, 16).replace('T', ' ');
+        let from;
+        switch(period) {
+            case '1h': from = new Date(now - 3600000).toISOString().slice(0, 16).replace('T', ' '); break;
+            case '24h': from = new Date(now - 86400000).toISOString().slice(0, 16).replace('T', ' '); break;
+            case '7d': from = new Date(now - 604800000).toISOString().slice(0, 16).replace('T', ' '); break;
+            case '30d': from = new Date(now - 2592000000).toISOString().slice(0, 16).replace('T', ' '); break;
+        }
+        document.getElementById('dateFrom').value = from;
+        document.getElementById('dateTo').value = to;
+    }
+
+    async function loadServices() {
+        try {
+            const response = await fetch('/api/logs/search/services');
+            const data = await response.json();
+            if (data.success && data.services) {
+                services = data.services;
+                const select = document.getElementById('serviceFilter');
+                services.forEach(service => {
+                    const option = document.createElement('option');
+                    option.value = service;
+                    option.textContent = service;
+                    select.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading services:', error);
+        }
+    }
+
+    async function loadRecentSearches() {
+        try {
+            const response = await fetch('/api/logs/search/recent?limit=5');
+            const data = await response.json();
+            if (data.success && data.searches) displayRecentSearches(data.searches);
+        } catch (error) {
+            console.error('Error loading recent searches:', error);
+        }
+    }
+
+    function displayRecentSearches(searches) {
+        const container = document.getElementById('recentSearches');
+        if (searches.length === 0) {
+            container.innerHTML = '<p class="text-gray-400 text-sm">No recent searches</p>';
+            return;
+        }
+        container.innerHTML = searches.map(search => `
+            <button onclick='applySearch(${JSON.stringify(search.filters)})' 
+                    class="filter-badge bg-purple-100 text-purple-700 px-4 py-2 rounded-lg hover:bg-purple-200 transition flex items-center space-x-2">
+                <i class="fas fa-search text-xs"></i>
+                <span class="text-sm">${search.name || formatSearchBadge(search.filters)}</span>
+                <span class="text-xs opacity-75">${new Date(search.created_at).toLocaleDateString()}</span>
+            </button>
+        `).join('');
+    }
+
+    function formatSearchBadge(filters) {
+        const parts = [];
+        if (filters.query) parts.push(`"${filters.query.substring(0, 20)}..."`);
+        if (filters.level) parts.push(filters.level);
+        if (filters.service) parts.push(filters.service);
+        return parts.join(' | ') || 'Quick search';
+    }
+
+    function applySearch(filters) {
+        if (filters.query) document.getElementById('searchText').value = filters.query;
+        if (filters.level) document.getElementById('logLevel').value = filters.level;
+        if (filters.service) document.getElementById('serviceFilter').value = filters.service;
+        if (filters.date_from) document.getElementById('dateFrom').value = filters.date_from;
+        if (filters.date_to) document.getElementById('dateTo').value = filters.date_to;
+        if (filters.size) document.getElementById('sizeLimit').value = filters.size;
+        performSearch();
+    }
+
+    async function performSearch() {
+        const filters = {
+            query: document.getElementById('searchText').value.trim(),
+            level: document.getElementById('logLevel').value,
+            service: document.getElementById('serviceFilter').value,
+            date_from: document.getElementById('dateFrom').value,
+            date_to: document.getElementById('dateTo').value,
+            size: parseInt(document.getElementById('sizeLimit').value)
+        };
+        
+        document.getElementById('loadingIndicator').classList.remove('hidden');
+        document.getElementById('noResults').classList.add('hidden');
+        document.getElementById('resultsContainer').classList.add('hidden');
+        
+        try {
+            const response = await fetch('/api/logs/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filters)
+            });
+            const data = await response.json();
+            if (data.success) {
+                currentResults = data.results || [];
+                displayResults(currentResults);
+            } else {
+                showError(data.error || 'Search failed');
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+            showError('Network error. Please try again.');
+        } finally {
+            document.getElementById('loadingIndicator').classList.add('hidden');
+        }
+    }
+
+    function displayResults(results) {
+        const tbody = document.getElementById('resultsTable');
+        const count = document.getElementById('resultsCount');
+        count.textContent = `(${results.length} results)`;
+        
+        if (results.length === 0) {
+            document.getElementById('noResults').classList.remove('hidden');
+            document.getElementById('resultsContainer').classList.add('hidden');
+            return;
+        }
+        
+        document.getElementById('noResults').classList.add('hidden');
+        document.getElementById('resultsContainer').classList.remove('hidden');
+        
+        tbody.innerHTML = results.map((log, index) => {
+            const timestamp = new Date(log['@timestamp']).toLocaleString('fr-FR');
+            const level = log.level || 'INFO';
+            const service = log.service || 'unknown';
+            const message = (log.message || '').substring(0, 100);
+            
+            return `
+                <tr class="log-row" onclick="showLogDetail(${index})">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${timestamp}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="level-badge level-${level.toLowerCase()}">${level}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${service}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${message}${message.length >= 100 ? '...' : ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="showLogDetail(${index}); event.stopPropagation();" 
+                                class="text-purple-600 hover:text-purple-800 mr-2">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function showLogDetail(index) {
+        const log = currentResults[index];
+        const content = document.getElementById('logDetailContent');
+        content.innerHTML = `
+            <div class="space-y-4">
+                ${Object.entries(log).map(([key, value]) => `
+                    <div class="border-b border-gray-200 pb-3">
+                        <dt class="text-sm font-semibold text-gray-600 mb-1">${key}</dt>
+                        <dd class="text-sm text-gray-800 break-words">${typeof value === 'object' ? JSON.stringify(value, null, 2) : value}</dd>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        document.getElementById('logDetailModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+        document.getElementById('logDetailModal').classList.add('hidden');
+    }
+
+    async function saveSearch() {
+        const filters = {
+            query: document.getElementById('searchText').value.trim(),
+            level: document.getElementById('logLevel').value,
+            service: document.getElementById('serviceFilter').value,
+            date_from: document.getElementById('dateFrom').value,
+            date_to: document.getElementById('dateTo').value,
+            size: parseInt(document.getElementById('sizeLimit').value)
+        };
+        const name = prompt('Enter a name for this search (optional):');
+        try {
+            const response = await fetch('/api/logs/search/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, filters })
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('Search saved successfully!');
+                loadRecentSearches();
+            } else {
+                alert('Failed to save search: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Save error:', error);
+            alert('Network error. Could not save search.');
+        }
+    }
+
+    function resetFilters() {
+        document.getElementById('searchText').value = '';
+        document.getElementById('logLevel').value = '';
+        document.getElementById('serviceFilter').value = '';
+        document.getElementById('sizeLimit').value = '100';
+        setQuickDate('24h');
+        currentResults = [];
+        document.getElementById('resultsTable').innerHTML = '';
+        document.getElementById('resultsCount').textContent = '(0 results)';
+        document.getElementById('resultsContainer').classList.add('hidden');
+        document.getElementById('noResults').classList.add('hidden');
+    }
+
+    function exportResults(format) {
+        if (currentResults.length === 0) {
+            alert('No results to export');
+            return;
+        }
+        let content, filename, type;
+        if (format === 'json') {
+            content = JSON.stringify(currentResults, null, 2);
+            filename = `search_results_${Date.now()}.json`;
+            type = 'application/json';
+        } else if (format === 'csv') {
+            const headers = Object.keys(currentResults[0]).join(',');
+            const rows = currentResults.map(log => 
+                Object.values(log).map(val => typeof val === 'object' ? JSON.stringify(val) : val).join(',')
+            ).join('\n');
+            content = headers + '\n' + rows;
+            filename = `search_results_${Date.now()}.csv`;
+            type = 'text/csv';
+        }
+        const blob = new Blob([content], { type });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    function showError(message) {
+        document.getElementById('loadingIndicator').classList.add('hidden');
+        document.getElementById('noResults').classList.remove('hidden');
+        document.getElementById('resultsContainer').classList.add('hidden');
+        alert(message);
+    }
+
+    function viewInTable() {
+        const filters = {
+            query: document.getElementById('searchText').value.trim(),
+            level: document.getElementById('logLevel').value,
+            service: document.getElementById('serviceFilter').value,
+            date_from: document.getElementById('dateFrom').value,
+            date_to: document.getElementById('dateTo').value
+        };
+        const params = new URLSearchParams();
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value) params.append(key, value);
+        });
+        window.location.href = `/results?${params.toString()}`;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+    });
+</script>
+{% endblock %}

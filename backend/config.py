@@ -29,7 +29,7 @@ class Config:
         'port': int(os.getenv('ELASTICSEARCH_PORT', 9200)),
         'user': os.getenv('ELASTICSEARCH_USER', 'elastic'),
         'password': os.getenv('ELASTICSEARCH_PASSWORD', 'changeme'),
-        'index_prefix': os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'ecommerce-logs')
+        'index_prefix': os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'logs-ecom')
     }
     
     # Logstash Configuration

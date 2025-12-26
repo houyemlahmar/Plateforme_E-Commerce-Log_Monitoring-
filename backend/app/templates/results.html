@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results - E-commerce Logs{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-shadow {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    .log-row:hover {
+        background-color: #f9fafb;
+        cursor: pointer;
+    }
+    .level-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .level-debug { background-color: #dbeafe; color: #1e40af; }
+    .level-info { background-color: #d1fae5; color: #065f46; }
+    .level-warning { background-color: #fef3c7; color: #92400e; }
+    .level-error { background-color: #fee2e2; color: #991b1b; }
+    .level-critical { background-color: #fae8ff; color: #86198f; }
+    .pagination-btn {
+        transition: all 0.2s ease;
+    }
+    .pagination-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .pagination-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .sort-icon {
+        transition: transform 0.2s ease;
+    }
+    .sort-asc .sort-icon {
+        transform: rotate(0deg);
+    }
+    .sort-desc .sort-icon {
+        transform: rotate(180deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+    
+    <!-- Header -->
+    <div class="bg-white rounded-xl p-6 card-shadow mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                    <i class="fas fa-table text-purple-600 mr-2"></i>
+                    Search Results
+                </h1>
+                <p class="text-gray-600">
+                    <span id="totalResults">0</span> logs found
+                    <span id="filterInfo" class="ml-2 text-sm text-gray-500"></span>
+                </p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button onclick="exportToJSON()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition duration-200 flex items-center space-x-2">
+                    <i class="fas fa-download"></i>
+                    <span>Export JSON</span>
+                </button>
+                <button onclick="exportToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition duration-200 flex items-center space-x-2">
+                    <i class="fas fa-file-csv"></i>
+                    <span>Export CSV</span>
+                </button>
+                <a href="/search" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition duration-200 flex items-center space-x-2">
+                    <i class="fas fa-search"></i>
+                    <span>New Search</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="bg-white rounded-xl card-shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th onclick="sortTable('timestamp')" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition">
+                            <div class="flex items-center space-x-1">
+                                <span>Date/Time</span>
+                                <i class="fas fa-sort sort-icon text-gray-400"></i>
+                            </div>
+                        </th>
+                        <th onclick="sortTable('level')" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition">
+                            <div class="flex items-center space-x-1">
+                                <span>Level</span>
+                                <i class="fas fa-sort sort-icon text-gray-400"></i>
+                            </div>
+                        </th>
+                        <th onclick="sortTable('service')" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition">
+                            <div class="flex items-center space-x-1">
+                                <span>Service</span>
+                                <i class="fas fa-sort sort-icon text-gray-400"></i>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Message
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Results will be populated here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div class="text-sm text-gray-600">
+                    Showing <span id="showingFrom">0</span> to <span id="showingTo">0</span> of <span id="totalCount">0</span> results
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="goToFirstPage()" id="firstPageBtn" class="pagination-btn px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button onclick="previousPage()" id="prevPageBtn" class="pagination-btn px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                        <i class="fas fa-angle-left mr-1"></i>
+                        Previous
+                    </button>
+                    <span class="px-4 py-2 bg-purple-100 border border-purple-300 rounded-lg text-purple-700 font-semibold">
+                        Page <span id="currentPage">1</span> of <span id="totalPages">1</span>
+                    </span>
+                    <button onclick="nextPage()" id="nextPageBtn" class="pagination-btn px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                        Next
+                        <i class="fas fa-angle-right ml-1"></i>
+                    </button>
+                    <button onclick="goToLastPage()" id="lastPageBtn" class="pagination-btn px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm text-gray-600">Rows per page:</label>
+                    <select id="rowsPerPage" onchange="changeRowsPerPage()" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Log Detail Modal -->
+<div id="logDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-4 flex items-center justify-between">
+            <h3 class="text-xl font-bold"><i class="fas fa-info-circle mr-2"></i>Log Details</h3>
+            <button onclick="closeModal()" class="text-white hover:text-gray-200 transition">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        <div id="logDetailContent" class="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allResults = [];
+    let displayedResults = [];
+    let currentPage = 1;
+    let rowsPerPage = 50;
+    let sortColumn = 'timestamp';
+    let sortDirection = 'desc';
+
+    document.addEventListener('DOMContentLoaded', function() {
+        fetchResults();
+    });
+
+    async function fetchResults() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const filters = {
+            query: urlParams.get('query') || '',
+            level: urlParams.get('level') || '',
+            service: urlParams.get('service') || '',
+            date_from: urlParams.get('date_from') || '',
+            date_to: urlParams.get('date_to') || '',
+            size: 1000
+        };
+
+        updateFilterInfo(filters);
+
+        try {
+            const response = await fetch('/api/logs/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filters)
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                allResults = data.results || [];
+                displayedResults = [...allResults];
+                sortTable(sortColumn);
+                updateDisplay();
+            } else {
+                showError(data.error || 'Failed to fetch results');
+            }
+        } catch (error) {
+            console.error('Fetch error:', error);
+            showError('Network error. Please try again.');
+        }
+    }
+
+    function updateFilterInfo(filters) {
+        const infoParts = [];
+        if (filters.query) infoParts.push(`Query: "${filters.query}"`);
+        if (filters.level) infoParts.push(`Level: ${filters.level}`);
+        if (filters.service) infoParts.push(`Service: ${filters.service}`);
+        if (filters.date_from || filters.date_to) {
+            const dateRange = `${filters.date_from || 'start'} to ${filters.date_to || 'now'}`;
+            infoParts.push(`Date: ${dateRange}`);
+        }
+        
+        document.getElementById('filterInfo').textContent = 
+            infoParts.length > 0 ? '(' + infoParts.join(' | ') + ')' : '(All logs)';
+    }
+
+    function sortTable(column) {
+        if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortColumn = column;
+            sortDirection = 'desc';
+        }
+
+        displayedResults.sort((a, b) => {
+            let valA, valB;
+            
+            if (column === 'timestamp') {
+                valA = new Date(a['@timestamp']);
+                valB = new Date(b['@timestamp']);
+            } else if (column === 'level') {
+                const levelOrder = { DEBUG: 1, INFO: 2, WARNING: 3, ERROR: 4, CRITICAL: 5 };
+                valA = levelOrder[a.level] || 0;
+                valB = levelOrder[b.level] || 0;
+            } else if (column === 'service') {
+                valA = (a.service || '').toLowerCase();
+                valB = (b.service || '').toLowerCase();
+            }
+
+            if (sortDirection === 'asc') {
+                return valA > valB ? 1 : -1;
+            } else {
+                return valA < valB ? 1 : -1;
+            }
+        });
+
+        updateSortIcons(column);
+        currentPage = 1;
+        updateDisplay();
+    }
+
+    function updateSortIcons(activeColumn) {
+        document.querySelectorAll('th .sort-icon').forEach(icon => {
+            icon.className = 'fas fa-sort sort-icon text-gray-400';
+        });
+        
+        const activeHeader = document.querySelector(`th[onclick="sortTable('${activeColumn}')"] .sort-icon`);
+        if (activeHeader) {
+            activeHeader.className = `fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} sort-icon text-purple-600`;
+        }
+    }
+
+    function updateDisplay() {
+        const totalResults = displayedResults.length;
+        const totalPages = Math.ceil(totalResults / rowsPerPage);
+        const startIndex = (currentPage - 1) * rowsPerPage;
+        const endIndex = Math.min(startIndex + rowsPerPage, totalResults);
+        const pageResults = displayedResults.slice(startIndex, endIndex);
+
+        // Update stats
+        document.getElementById('totalResults').textContent = totalResults;
+        document.getElementById('totalCount').textContent = totalResults;
+        document.getElementById('showingFrom').textContent = totalResults > 0 ? startIndex + 1 : 0;
+        document.getElementById('showingTo').textContent = endIndex;
+        document.getElementById('currentPage').textContent = currentPage;
+        document.getElementById('totalPages').textContent = totalPages || 1;
+
+        // Update table
+        const tbody = document.getElementById('resultsTableBody');
+        tbody.innerHTML = pageResults.map((log, index) => {
+            const globalIndex = startIndex + index;
+            const timestamp = new Date(log['@timestamp']).toLocaleString('fr-FR');
+            const level = log.level || 'INFO';
+            const service = log.service || 'unknown';
+            const message = (log.message || '').substring(0, 100);
+
+            return `
+                <tr class="log-row" onclick="showLogDetail(${globalIndex})">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${timestamp}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="level-badge level-${level.toLowerCase()}">${level}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${service}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${message}${message.length >= 100 ? '...' : ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="showLogDetail(${globalIndex}); event.stopPropagation();" 
+                                class="text-purple-600 hover:text-purple-800">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Update pagination buttons
+        document.getElementById('firstPageBtn').disabled = currentPage === 1;
+        document.getElementById('prevPageBtn').disabled = currentPage === 1;
+        document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+        document.getElementById('lastPageBtn').disabled = currentPage >= totalPages;
+    }
+
+    function showLogDetail(index) {
+        const log = displayedResults[index];
+        const content = document.getElementById('logDetailContent');
+        content.innerHTML = `
+            <div class="space-y-4">
+                ${Object.entries(log).map(([key, value]) => `
+                    <div class="border-b border-gray-200 pb-3">
+                        <dt class="text-sm font-semibold text-gray-600 mb-1">${key}</dt>
+                        <dd class="text-sm text-gray-800 break-words font-mono">${typeof value === 'object' ? JSON.stringify(value, null, 2) : value}</dd>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        document.getElementById('logDetailModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+        document.getElementById('logDetailModal').classList.add('hidden');
+    }
+
+    function goToFirstPage() {
+        currentPage = 1;
+        updateDisplay();
+    }
+
+    function previousPage() {
+        if (currentPage > 1) {
+            currentPage--;
+            updateDisplay();
+        }
+    }
+
+    function nextPage() {
+        const totalPages = Math.ceil(displayedResults.length / rowsPerPage);
+        if (currentPage < totalPages) {
+            currentPage++;
+            updateDisplay();
+        }
+    }
+
+    function goToLastPage() {
+        currentPage = Math.ceil(displayedResults.length / rowsPerPage);
+        updateDisplay();
+    }
+
+    function changeRowsPerPage() {
+        rowsPerPage = parseInt(document.getElementById('rowsPerPage').value);
+        currentPage = 1;
+        updateDisplay();
+    }
+
+    function exportToJSON() {
+        if (displayedResults.length === 0) {
+            alert('No results to export');
+            return;
+        }
+        const content = JSON.stringify(displayedResults, null, 2);
+        const blob = new Blob([content], { type: 'application/json' });
+        downloadFile(blob, `results_${Date.now()}.json`);
+    }
+
+    function exportToCSV() {
+        if (displayedResults.length === 0) {
+            alert('No results to export');
+            return;
+        }
+
+        // UTF-8 BOM for proper encoding in Excel
+        const BOM = '\uFEFF';
+        
+        // Get all unique keys
+        const allKeys = new Set();
+        displayedResults.forEach(log => {
+            Object.keys(log).forEach(key => allKeys.add(key));
+        });
+        const headers = Array.from(allKeys);
+        
+        // Create CSV content
+        const headerRow = headers.map(h => `"${h}"`).join(',');
+        const rows = displayedResults.map(log => {
+            return headers.map(header => {
+                let value = log[header] || '';
+                
+                // Handle objects and arrays
+                if (typeof value === 'object') {
+                    value = JSON.stringify(value);
+                }
+                
+                // Convert to string and clean
+                value = String(value)
+                    .replace(/\r?\n/g, ' ')  // Remove line breaks
+                    .replace(/"/g, '""');    // Escape quotes
+                
+                return `"${value}"`;
+            }).join(',');
+        }).join('\r\n');
+        
+        const csvContent = BOM + headerRow + '\r\n' + rows;
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+        downloadFile(blob, `results_${Date.now()}.csv`);
+    }
+
+    function downloadFile(blob, filename) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    function showError(message) {
+        alert(message);
+    }
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+    });
+</script>
+{% endblock %}

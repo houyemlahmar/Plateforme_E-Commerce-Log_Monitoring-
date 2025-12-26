@@ -76,15 +76,36 @@ class LogService:
             # Parse preview based on file type
             preview = []
             if file_extension == 'json':
-                for line in preview_lines:
-                    try:
-                        preview.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        preview.append({'raw': line, 'error': 'Invalid JSON'})
+                try:
+                    # Try parsing as JSON array first
+                    json_data = json.loads(content)
+                    if isinstance(json_data, list):
+                        preview = json_data[:10]
+                    else:
+                        preview = [json_data]
+                except json.JSONDecodeError:
+                    # Try parsing as JSONL (JSON lines)
+                    for line in preview_lines:
+                        if line.strip():
+                            try:
+                                preview.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                preview.append({'raw': line, 'error': 'Invalid JSON'})
             elif file_extension == 'csv':
                 try:
-                    csv_reader = csv.DictReader(preview_lines)
-                    preview = list(csv_reader)
+                    # Parse CSV with DictReader
+                    from io import StringIO
+                    csv_content = '\n'.join(preview_lines)
+                    csv_reader = csv.DictReader(StringIO(csv_content))
+                    # Clean CSV data: remove None keys and empty string values
+                    preview = []
+                    for row in csv_reader:
+                        cleaned_row = {
+                            str(k): v for k, v in row.items() 
+                            if k is not None and v is not None and v.strip() != ''
+                        }
+                        if cleaned_row:  # Only add non-empty rows
+                            preview.append(cleaned_row)
                 except Exception as e:
                     logger.warning(f"CSV parsing error: {str(e)}")
                     preview = [{'raw': line} for line in preview_lines]

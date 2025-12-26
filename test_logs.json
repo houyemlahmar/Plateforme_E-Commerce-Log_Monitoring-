@@ -1,0 +1,99 @@
+[
+  {
+    "timestamp": "2025-12-25T10:15:30.000Z",
+    "level": "INFO",
+    "service": "auth-service",
+    "message": "User login successful",
+    "user_id": "user_12345",
+    "ip_address": "192.168.1.100",
+    "request_id": "req_abc123"
+  },
+  {
+    "timestamp": "2025-12-25T10:16:45.000Z",
+    "level": "WARNING",
+    "service": "payment-service",
+    "message": "Payment processing delayed",
+    "transaction_id": "txn_789xyz",
+    "amount": 99.99,
+    "currency": "USD",
+    "request_id": "req_def456"
+  },
+  {
+    "timestamp": "2025-12-25T10:17:22.000Z",
+    "level": "ERROR",
+    "service": "database-service",
+    "message": "Connection timeout to database",
+    "database": "users_db",
+    "error_code": "DB_TIMEOUT",
+    "retry_count": 3,
+    "request_id": "req_ghi789"
+  },
+  {
+    "timestamp": "2025-12-25T10:18:10.000Z",
+    "level": "INFO",
+    "service": "notification-service",
+    "message": "Email sent successfully",
+    "recipient": "user@example.com",
+    "email_type": "confirmation",
+    "request_id": "req_jkl012"
+  },
+  {
+    "timestamp": "2025-12-25T10:19:55.000Z",
+    "level": "CRITICAL",
+    "service": "api-gateway",
+    "message": "Service unavailable - too many requests",
+    "status_code": 503,
+    "endpoint": "/api/v1/orders",
+    "requests_per_second": 5000,
+    "request_id": "req_mno345"
+  },
+  {
+    "timestamp": "2025-12-25T10:20:33.000Z",
+    "level": "DEBUG",
+    "service": "cache-service",
+    "message": "Cache miss for key",
+    "cache_key": "user_profile_12345",
+    "ttl": 300,
+    "request_id": "req_pqr678"
+  },
+  {
+    "timestamp": "2025-12-25T10:21:18.000Z",
+    "level": "INFO",
+    "service": "order-service",
+    "message": "Order created successfully",
+    "order_id": "order_98765",
+    "customer_id": "cust_54321",
+    "total_amount": 149.99,
+    "request_id": "req_stu901"
+  },
+  {
+    "timestamp": "2025-12-25T10:22:40.000Z",
+    "level": "ERROR",
+    "service": "inventory-service",
+    "message": "Product out of stock",
+    "product_id": "prod_11111",
+    "requested_quantity": 5,
+    "available_quantity": 0,
+    "request_id": "req_vwx234"
+  },
+  {
+    "timestamp": "2025-12-25T10:23:55.000Z",
+    "level": "WARNING",
+    "service": "fraud-detection",
+    "message": "Suspicious activity detected",
+    "user_id": "user_99999",
+    "risk_score": 85,
+    "flags": ["multiple_ips", "high_velocity"],
+    "request_id": "req_yza567"
+  },
+  {
+    "timestamp": "2025-12-25T10:24:12.000Z",
+    "level": "INFO",
+    "service": "search-service",
+    "message": "Search query executed",
+    "query": "winter jackets",
+    "results_count": 47,
+    "execution_time_ms": 23,
+    "request_id": "req_bcd890"
+  }
+]

@@ -22,7 +22,7 @@ class ElasticsearchService:
             config: Elasticsearch configuration dictionary
         """
         self.config = config
-        self.index_prefix = config.get('index_prefix', 'ecommerce-logs')
+        self.index_prefix = config.get('index_prefix', 'logs-ecom')
         
         try:
             self.client = Elasticsearch(
@@ -80,7 +80,11 @@ class ElasticsearchService:
             dict: Indexing result
         """
         try:
-            full_index_name = f"{self.index_prefix}-{index_name}"
+            # Use wildcard pattern if index_name is 'logs', otherwise construct specific index
+            if index_name == 'logs':
+                full_index_name = f"{self.index_prefix}-*"
+            else:
+                full_index_name = f"{self.index_prefix}-{index_name}"
             
             result = self.client.index(
                 index=full_index_name,
@@ -108,7 +112,11 @@ class ElasticsearchService:
         try:
             from elasticsearch.helpers import bulk
             
-            full_index_name = f"{self.index_prefix}-{index_name}"
+            # Use wildcard pattern if index_name is 'logs', otherwise construct specific index
+            if index_name == 'logs':
+                full_index_name = f"{self.index_prefix}-*"
+            else:
+                full_index_name = f"{self.index_prefix}-{index_name}"
             
             actions = [
                 {
@@ -139,7 +147,11 @@ class ElasticsearchService:
             dict: Search results
         """
         try:
-            full_index_name = f"{self.index_prefix}-{index_name}"
+            # Use wildcard pattern if index_name is 'logs', otherwise construct specific index
+            if index_name == 'logs':
+                full_index_name = f"{self.index_prefix}-*"
+            else:
+                full_index_name = f"{self.index_prefix}-{index_name}"
             
             # Only pass size parameter if not already in query body
             if 'size' in query:
@@ -172,7 +184,11 @@ class ElasticsearchService:
             dict: Aggregation results
         """
         try:
-            full_index_name = f"{self.index_prefix}-{index_name}"
+            # Use wildcard pattern if index_name is 'logs', otherwise construct specific index
+            if index_name == 'logs':
+                full_index_name = f"{self.index_prefix}-*"
+            else:
+                full_index_name = f"{self.index_prefix}-{index_name}"
             
             result = self.client.search(
                 index=full_index_name,

@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard E-commerce Logs{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gradient-bg {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card-shadow {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        transition: transform 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header Actions -->
+<div class="gradient-bg text-white shadow-lg -mt-8 mb-8">
+    <div class="container mx-auto px-6 py-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold">Dashboard Overview</h2>
+                <p class="text-sm opacity-90 mt-1">Analyse temps réel des logs e-commerce</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm opacity-90">
+                    <i class="far fa-clock mr-1"></i>
+                    Dernière mise à jour: <span id="lastUpdate">{{ last_update }}</span>
+                </span>
+                <button onclick="refreshData()" class="bg-white text-purple-600 px-4 py-2 rounded-lg hover:bg-purple-50 transition duration-200 flex items-center space-x-2">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Actualiser</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<div class="container mx-auto px-6 py-8">
+    
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        
+        <!-- Total Logs -->
+        <div class="bg-white rounded-xl p-6 card-shadow kpi-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-semibold uppercase">Total Logs</p>
+                    <p class="text-3xl font-bold text-gray-800 mt-2" id="totalLogs">{{ kpis.total_logs | default(0) }}</p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        <span class="text-green-500 font-semibold">+{{ kpis.logs_growth | default(0) }}%</span> depuis hier
+                    </p>
+                </div>
+                <div class="bg-blue-100 rounded-full p-4">
+                    <i class="fas fa-database text-blue-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Errors -->
+        <div class="bg-white rounded-xl p-6 card-shadow kpi-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-semibold uppercase">Erreurs</p>
+                    <p class="text-3xl font-bold text-red-600 mt-2" id="totalErrors">{{ kpis.total_errors | default(0) }}</p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        <span class="text-gray-600 font-semibold">{{ kpis.error_rate | default(0) }}%</span> du total
+                    </p>
+                </div>
+                <div class="bg-red-100 rounded-full p-4">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Today -->
+        <div class="bg-white rounded-xl p-6 card-shadow kpi-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-semibold uppercase">Logs Aujourd'hui</p>
+                    <p class="text-3xl font-bold text-gray-800 mt-2" id="logsToday">{{ kpis.logs_today | default(0) }}</p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        <span class="text-green-500 font-semibold">Indexés aujourd'hui</span>
+                    </p>
+                </div>
+                <div class="bg-green-100 rounded-full p-4">
+                    <i class="fas fa-calendar-day text-green-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Uploaded Files -->
+        <div class="bg-white rounded-xl p-6 card-shadow kpi-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-semibold uppercase">Fichiers Uploadés</p>
+                    <p class="text-3xl font-bold text-gray-800 mt-2" id="uploadedFiles">{{ kpis.uploaded_files | default(0) }}</p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        <span class="text-purple-500 font-semibold">Total uploads</span>
+                    </p>
+                </div>
+                <div class="bg-purple-100 rounded-full p-4">
+                    <i class="fas fa-file-upload text-purple-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        
+        <!-- Logs Timeline Chart -->
+        <div class="bg-white rounded-xl p-6 card-shadow">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-gray-800">
+                    <i class="fas fa-chart-area text-blue-600 mr-2"></i>
+                    Logs par Heure (24h)
+                </h2>
+                <select id="timeRangeSelect" onchange="updateTimeRange(this.value)" class="bg-gray-100 border border-gray-300 rounded-lg px-3 py-1 text-sm">
+                    <option value="24h">24 heures</option>
+                    <option value="7d">7 jours</option>
+                    <option value="30d">30 jours</option>
+                </select>
+            </div>
+            <canvas id="logsTimelineChart" height="80"></canvas>
+        </div>
+
+        <!-- Log Levels Distribution -->
+        <div class="bg-white rounded-xl p-6 card-shadow">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-gray-800">
+                    <i class="fas fa-chart-pie text-purple-600 mr-2"></i>
+                    Distribution par Niveau
+                </h2>
+            </div>
+            <canvas id="logLevelsChart" height="80"></canvas>
+        </div>
+
+    </div>
+
+    <!-- Services & Actions Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        
+        <!-- Top Services -->
+        <div class="bg-white rounded-xl p-6 card-shadow">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">
+                <i class="fas fa-server text-indigo-600 mr-2"></i>
+                Top Services
+            </h2>
+            <div class="space-y-3">
+                {% for service in kpis.top_services | default([]) %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                        <span class="text-gray-700 font-medium">{{ service.name }}</span>
+                    </div>
+                    <span class="text-gray-500 font-semibold">{{ service.count }}</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-indigo-500 h-2 rounded-full" style="width: {{ service.percentage }}%"></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Recent Errors -->
+        <div class="bg-white rounded-xl p-6 card-shadow lg:col-span-2">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">
+                <i class="fas fa-bug text-red-600 mr-2"></i>
+                Erreurs Récentes
+            </h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-200">
+                            <th class="text-left py-2 px-3 text-gray-600 font-semibold">Timestamp</th>
+                            <th class="text-left py-2 px-3 text-gray-600 font-semibold">Service</th>
+                            <th class="text-left py-2 px-3 text-gray-600 font-semibold">Message</th>
+                            <th class="text-left py-2 px-3 text-gray-600 font-semibold">Niveau</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentErrorsTable">
+                        {% for error in kpis.recent_errors | default([]) %}
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="py-2 px-3 text-gray-600">{{ error.timestamp }}</td>
+                            <td class="py-2 px-3">
+                                <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">{{ error.service }}</span>
+                            </td>
+                            <td class="py-2 px-3 text-gray-700">{{ error.message[:50] }}...</td>
+                            <td class="py-2 px-3">
+                                <span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded font-semibold">{{ error.level }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Kibana Dashboard Button -->
+        <a href="{{ kibana_url | default('http://localhost:5601') }}" target="_blank" 
+           class="bg-gradient-to-r from-pink-500 to-orange-500 text-white rounded-xl p-6 card-shadow hover:shadow-xl transition duration-300 flex items-center justify-between group">
+            <div>
+                <h3 class="text-xl font-bold mb-2">Kibana Dashboard</h3>
+                <p class="text-sm opacity-90">Visualisations avancées</p>
+            </div>
+            <i class="fas fa-external-link-alt text-3xl opacity-80 group-hover:opacity-100 transition duration-300"></i>
+        </a>
+
+        <!-- Search Logs -->
+        <a href="/api/search" 
+           class="bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl p-6 card-shadow hover:shadow-xl transition duration-300 flex items-center justify-between group">
+            <div>
+                <h3 class="text-xl font-bold mb-2">Rechercher Logs</h3>
+                <p class="text-sm opacity-90">Query Builder Elasticsearch</p>
+            </div>
+            <i class="fas fa-search text-3xl opacity-80 group-hover:opacity-100 transition duration-300"></i>
+        </a>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    const logsPerHour = {{ logs_per_hour | tojson }} || [];
+    const logLevelsData = {{ log_levels_distribution | tojson }} || {};
+    let logsTimelineChart, logLevelsChart;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Dashboard loaded. Logs per hour:', logsPerHour.length, 'items');
+        console.log('Log levels:', Object.keys(logLevelsData).length, 'levels');
+        initializeCharts();
+        startAutoRefresh();
+    });
+
+    function initializeCharts() {
+        const ctx1 = document.getElementById('logsTimelineChart')?.getContext('2d');
+        if (!ctx1) {
+            console.error('Cannot find logsTimelineChart canvas');
+            return;
+        }
+        if (!ctx1) {
+            console.error('Cannot find logsTimelineChart canvas');
+            return;
+        }
+        
+        logsTimelineChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: logsPerHour.length > 0 ? logsPerHour.map(item => item.hour) : ['No data'],
+                datasets: [{
+                    label: 'Total Logs',
+                    data: logsPerHour.length > 0 ? logsPerHour.map(item => item.total) : [0],
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Erreurs',
+                    data: logsPerHour.length > 0 ? logsPerHour.map(item => item.errors) : [0],
+                    borderColor: 'rgb(239, 68, 68)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: true, position: 'top' }, tooltip: { mode: 'index', intersect: false } },
+                scales: { y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString(); } } } }
+            }
+        });
+
+        const ctx2 = document.getElementById('logLevelsChart')?.getContext('2d');
+        if (!ctx2) {
+            console.error('Cannot find logLevelsChart canvas');
+            return;
+        }
+        
+        const levelsKeys = Object.keys(logLevelsData);
+        logLevelsChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: levelsKeys.length > 0 ? levelsKeys : ['No data'],
+                datasets: [{
+                    data: levelsKeys.length > 0 ? Object.values(logLevelsData) : [1],
+                    backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(251, 191, 36, 0.8)', 'rgba(239, 68, 68, 0.8)', 'rgba(147, 51, 234, 0.8)', 'rgba(59, 130, 246, 0.8)'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: true, position: 'right' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value.toLocaleString()} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async function refreshData() {
+        const refreshBtn = document.querySelector('button[onclick="refreshData()"]');
+        const icon = refreshBtn.querySelector('i');
+        icon.classList.add('fa-spin');
+        
+        try {
+            const response = await fetch('/api/dashboard/kpis');
+            const data = await response.json();
+            
+            document.getElementById('totalLogs').textContent = data.total_logs.toLocaleString();
+            document.getElementById('logsToday').textContent = data.logs_today.toLocaleString();
+            document.getElementById('totalErrors').textContent = data.total_errors.toLocaleString();
+            document.getElementById('uploadedFiles').textContent = data.uploaded_files.toLocaleString();
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('fr-FR');
+            
+            if (data.logs_per_hour) {
+                logsTimelineChart.data.labels = data.logs_per_hour.map(item => item.hour);
+                logsTimelineChart.data.datasets[0].data = data.logs_per_hour.map(item => item.total);
+                logsTimelineChart.data.datasets[1].data = data.logs_per_hour.map(item => item.errors);
+                logsTimelineChart.update();
+            }
+            
+            if (data.log_levels_distribution) {
+                logLevelsChart.data.labels = Object.keys(data.log_levels_distribution);
+                logLevelsChart.data.datasets[0].data = Object.values(data.log_levels_distribution);
+                logLevelsChart.update();
+            }
+        } catch (error) {
+            console.error('Error refreshing dashboard data:', error);
+            alert('Erreur lors du rafraîchissement des données');
+        } finally {
+            icon.classList.remove('fa-spin');
+        }
+    }
+
+    function startAutoRefresh() {
+        setInterval(refreshData, 10000);
+    }
+
+    function updateTimeRange(range) {
+        console.log('Time range changed to:', range);
+    }
+</script>
+{% endblock %}

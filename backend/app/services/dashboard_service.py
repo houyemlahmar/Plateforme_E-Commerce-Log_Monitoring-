@@ -50,20 +50,21 @@ class DashboardService:
             }
             
             agg_query = {
-                "log_types": {
-                    "terms": {"field": "log_type.keyword"}
+                "log_levels": {
+                    "terms": {"field": "level", "size": 10}
                 },
                 "errors": {
-                    "filter": {"term": {"log_type": "error"}}
-                },
-                "transactions": {
-                    "filter": {"term": {"log_type": "transaction"}},
-                    "aggs": {
-                        "total_amount": {"sum": {"field": "amount"}}
+                    "filter": {
+                        "bool": {
+                            "should": [
+                                {"match": {"level": "ERROR"}},
+                                {"match": {"level": "CRITICAL"}}
+                            ]
+                        }
                     }
                 },
-                "fraud_alerts": {
-                    "filter": {"term": {"fraud_detected": True}}
+                "services": {
+                    "terms": {"field": "service.keyword", "size": 10}
                 }
             }
             
@@ -73,12 +74,12 @@ class DashboardService:
             overview = {
                 'total_logs_24h': result.get('hits', {}).get('total', {}).get('value', 0),
                 'errors_24h': aggs.get('errors', {}).get('doc_count', 0),
-                'transactions_24h': aggs.get('transactions', {}).get('doc_count', 0),
-                'transaction_amount_24h': aggs.get('transactions', {}).get('total_amount', {}).get('value', 0),
-                'fraud_alerts_24h': aggs.get('fraud_alerts', {}).get('doc_count', 0),
-                'log_types_distribution': [
+                'transactions_24h': 0,  # Not applicable for these logs
+                'transaction_amount_24h': 0,  # Not applicable
+                'fraud_alerts_24h': 0,  # Not applicable
+                'log_levels_distribution': [
                     {'type': b['key'], 'count': b['doc_count']}
-                    for b in aggs.get('log_types', {}).get('buckets', [])
+                    for b in aggs.get('log_levels', {}).get('buckets', [])
                 ]
             }
             
@@ -179,7 +180,14 @@ class DashboardService:
         
         agg_query = {
             "errors": {
-                "filter": {"term": {"log_type": "error"}}
+                "filter": {
+                    "bool": {
+                        "should": [
+                            {"match": {"level": "ERROR"}},
+                            {"match": {"level": "CRITICAL"}}
+                        ]
+                    }
+                }
             }
         }
         
@@ -196,7 +204,7 @@ class DashboardService:
                 "bool": {
                     "must": [
                         {"range": {"@timestamp": {"gte": start_date}}},
-                        {"term": {"log_type": "performance"}}
+                        {"exists": {"field": "response_time"}}
                     ]
                 }
             }
@@ -310,3 +318,317 @@ class DashboardService:
             'labels': [b['key_as_string'] for b in buckets],
             'data': [b.get('avg_response', {}).get('value', 0) for b in buckets]
         }
+    
+    def get_kpis(self, time_range='24h'):
+        """
+        Get all KPIs for dashboard HTML template
+        
+        Args:
+            time_range: Time range ('24h', '7d', '30d')
+        
+        Returns:
+            dict: All KPI data for dashboard
+        """
+        try:
+            cache_key = f"dashboard:kpis:{time_range}"
+            cached = self.redis_service.get(cache_key)
+            if cached:
+                return cached
+            
+            # Calculate time filter
+            now = datetime.utcnow()
+            if time_range == '7d':
+                start_time = now - timedelta(days=7)
+            elif time_range == '30d':
+                start_time = now - timedelta(days=30)
+            else:
+                start_time = now - timedelta(hours=24)
+            
+            time_filter = {
+                "range": {
+                    "@timestamp": {
+                        "gte": start_time.isoformat(),
+                        "lte": now.isoformat()
+                    }
+                }
+            }
+            
+            # Build comprehensive query with aggregations
+            query = {
+                "query": {
+                    "bool": {
+                        "must": [time_filter]
+                    }
+                },
+                "size": 0,
+                "aggs": {
+                    "total_logs": {
+                        "value_count": {"field": "@timestamp"}
+                    },
+                    "error_logs": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {"match": {"level": "ERROR"}},
+                                    {"match": {"level": "CRITICAL"}}
+                                ]
+                            }
+                        }
+                    },
+                    "unique_users": {
+                        "cardinality": {"field": "user_id.keyword"}
+                    },
+                    "avg_response_time": {
+                        "avg": {"field": "response_time"}
+                    },
+                    "logs_over_time": {
+                        "date_histogram": {
+                            "field": "@timestamp",
+                            "calendar_interval": "1h",
+                            "format": "HH:mm"
+                        },
+                        "aggs": {
+                            "errors": {
+                                "filter": {
+                                    "bool": {
+                                        "should": [
+                                            {"match": {"level": "ERROR"}},
+                                            {"match": {"level": "CRITICAL"}}
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "log_levels": {
+                        "terms": {"field": "level", "size": 10}
+                    },
+                    "top_services": {
+                        "terms": {"field": "service", "size": 5}
+                    }
+                }
+            }
+            
+            result = self.es_service.search('logs', query)
+            aggs = result.get('aggregations', {})
+            
+            total_logs = result.get('hits', {}).get('total', {}).get('value', 0)
+            total_errors = aggs.get('error_logs', {}).get('doc_count', 0)
+            error_rate = (total_errors / total_logs * 100) if total_logs > 0 else 0
+            
+            # Format logs per hour
+            logs_per_hour = []
+            for bucket in aggs.get('logs_over_time', {}).get('buckets', []):
+                logs_per_hour.append({
+                    'hour': bucket.get('key_as_string', ''),
+                    'total': bucket.get('doc_count', 0),
+                    'errors': bucket.get('errors', {}).get('doc_count', 0)
+                })
+            
+            # Format log levels distribution
+            log_levels_distribution = {}
+            for bucket in aggs.get('log_levels', {}).get('buckets', []):
+                log_levels_distribution[bucket['key']] = bucket['doc_count']
+            
+            # Format top services
+            top_services = []
+            service_buckets = aggs.get('top_services', {}).get('buckets', [])
+            total_service_logs = sum(b['doc_count'] for b in service_buckets)
+            for bucket in service_buckets:
+                top_services.append({
+                    'name': bucket['key'],
+                    'count': bucket['doc_count'],
+                    'percentage': round((bucket['doc_count'] / total_service_logs * 100), 1) if total_service_logs > 0 else 0
+                })
+            
+            # Get recent errors
+            recent_errors = self._get_recent_errors_for_kpis()
+            
+            # Get active users (last 5 minutes)
+            active_users = self._get_active_users()
+            
+            # Get logs indexed today
+            logs_today = self._get_logs_today()
+            
+            # Get total uploaded files count
+            uploaded_files = self._get_uploaded_files_count()
+            
+            kpis = {
+                'total_logs': total_logs,
+                'logs_today': logs_today,
+                'total_errors': total_errors,
+                'unique_users': aggs.get('unique_users', {}).get('value', 0) or 0,
+                'avg_response_time': round(aggs.get('avg_response_time', {}).get('value') or 0),
+                'uploaded_files': uploaded_files,
+                'logs_growth': 12.5,  # Mock value - can be calculated by comparing with previous period
+                'error_rate': round(error_rate, 2) if error_rate is not None else 0,
+                'active_users': active_users,
+                'logs_per_hour': logs_per_hour,
+                'log_levels_distribution': log_levels_distribution,
+                'top_services': top_services,
+                'recent_errors': recent_errors,
+                'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            # Cache for 60 seconds
+            self.redis_service.set(cache_key, kpis, ttl=60)
+            
+            return kpis
+        
+        except Exception as e:
+            logger.error(f"Error fetching KPIs: {str(e)}")
+            return self._get_empty_kpis()
+    
+    def _get_recent_errors_for_kpis(self, limit=10):
+        """Get recent error logs for KPIs"""
+        try:
+            query = {
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"level": "ERROR"}},
+                            {"match": {"level": "CRITICAL"}}
+                        ]
+                    }
+                },
+                "size": limit,
+                "sort": [{"@timestamp": {"order": "desc"}}]
+            }
+            
+            result = self.es_service.search('logs', query)
+            hits = result.get('hits', {}).get('hits', [])
+            
+            errors = []
+            for hit in hits:
+                source = hit.get('_source', {})
+                timestamp = source.get('@timestamp', '')
+                if 'T' in timestamp:
+                    timestamp = timestamp[:19].replace('T', ' ')
+                
+                errors.append({
+                    'timestamp': timestamp,
+                    'service': source.get('service', 'unknown'),
+                    'message': source.get('message', 'No message')[:100],
+                    'level': source.get('level', 'ERROR')
+                })
+            
+            return errors
+        
+        except Exception as e:
+            logger.error(f"Error fetching recent errors: {str(e)}")
+            return []
+    
+    def _get_active_users(self):
+        """Get count of active users in last 5 minutes"""
+        try:
+            five_mins_ago = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+            
+            query = {
+                "query": {
+                    "range": {"@timestamp": {"gte": five_mins_ago}}
+                },
+                "size": 0,
+                "aggs": {
+                    "active_users": {
+                        "cardinality": {"field": "user_id.keyword"}
+                    }
+                }
+            }
+            
+            result = self.es_service.search('logs', query)
+            return result.get('aggregations', {}).get('active_users', {}).get('value', 0)
+        
+        except Exception as e:
+            logger.error(f"Error fetching active users: {str(e)}")
+            return 0
+    
+    def _get_logs_today(self):
+        """Get count of logs indexed today"""
+        try:
+            now = datetime.utcnow()
+            start_of_day = datetime(now.year, now.month, now.day, 0, 0, 0)
+            
+            query = {
+                "query": {
+                    "range": {
+                        "@timestamp": {
+                            "gte": start_of_day.isoformat(),
+                            "lte": now.isoformat()
+                        }
+                    }
+                },
+                "size": 0
+            }
+            
+            result = self.es_service.search('logs', query)
+            return result.get('hits', {}).get('total', {}).get('value', 0)
+        
+        except Exception as e:
+            logger.error(f"Error fetching logs today: {str(e)}")
+            return 0
+    
+    def _get_uploaded_files_count(self):
+        """Get total count of uploaded files from MongoDB"""
+        try:
+            # Count documents in uploads collection
+            count = self.mongo_service.db.uploads.count_documents({})
+            return count
+        
+        except Exception as e:
+            logger.error(f"Error fetching uploaded files count: {str(e)}")
+            return 0
+    
+    def _get_empty_kpis(self):
+        """Return empty KPIs structure"""
+        return {
+            'total_logs': 0,
+            'logs_today': 0,
+            'total_errors': 0,
+            'unique_users': 0,
+            'avg_response_time': 0,
+            'uploaded_files': 0,
+            'logs_growth': 0,
+            'error_rate': 0,
+            'active_users': 0,
+            'logs_per_hour': [],
+            'log_levels_distribution': {},
+            'top_services': [],
+            'recent_errors': [],
+            'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+    
+    def get_system_health(self):
+        """
+        Check health status of connected systems
+        
+        Returns:
+            dict: System health statuses
+        """
+        health = {
+            'elasticsearch': 'Disconnected',
+            'redis': 'Unknown',
+            'mongodb': 'Unknown'
+        }
+        
+        try:
+            # Check Elasticsearch
+            if self.es_service.client.ping():
+                health['elasticsearch'] = 'Connecté'
+        except Exception as e:
+            logger.error(f"Error checking Elasticsearch: {str(e)}")
+        
+        try:
+            # Check Redis
+            if self.redis_service.client.ping():
+                health['redis'] = 'Actif'
+        except Exception as e:
+            logger.error(f"Error checking Redis: {str(e)}")
+        
+        try:
+            # Check MongoDB
+            self.mongo_service.db.command('ping')
+            health['mongodb'] = 'Connecté'
+        except Exception as e:
+            logger.error(f"Error checking MongoDB: {str(e)}")
+        
+        return health

@@ -4,12 +4,153 @@ Provides dashboard data and metrics
 """
 
 import logging
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, render_template
 from app.services.dashboard_service import DashboardService
+from config import get_config
 
 logger = logging.getLogger(__name__)
 
+# Create two blueprints: one for HTML views, one for API
 bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
+dashboard_view_bp = Blueprint('dashboard_view', __name__)
+
+
+@dashboard_view_bp.route('/dashboard', methods=['GET'])
+def dashboard_html():
+    """
+    Render dashboard HTML page (accessible at /dashboard)
+    
+    Query Parameters:
+        range (str): Time range ('24h', '7d', '30d') - default: '24h'
+    
+    Returns:
+        Rendered HTML dashboard
+    """
+    try:
+        # Get time range from query params
+        time_range = request.args.get('range', '24h')
+        
+        # Initialize service
+        dashboard_service = DashboardService(
+            current_app.es_service,
+            current_app.mongo_service,
+            current_app.redis_service
+        )
+        
+        # Fetch KPIs
+        kpis = dashboard_service.get_kpis(time_range)
+        
+        # Get Kibana URL from config
+        config = get_config()
+        kibana_url = config.KIBANA_URL if hasattr(config, 'KIBANA_URL') else 'http://localhost:5601'
+        
+        # Prepare context for template
+        context = {
+            'kpis': kpis,
+            'kibana_url': kibana_url,
+            'logs_per_hour': kpis.get('logs_per_hour', []),
+            'log_levels_distribution': kpis.get('log_levels_distribution', {}),
+            'last_update': kpis.get('last_update', '')
+        }
+        
+        return render_template('dashboard.html', **context)
+    
+    except Exception as e:
+        logger.error(f"Error rendering dashboard: {str(e)}")
+        # Return error template with empty data
+        return render_template('dashboard.html',
+                             kpis={},
+                             kibana_url='http://localhost:5601',
+                             logs_per_hour=[],
+                             log_levels_distribution={},
+                             last_update='Error loading data'), 500
+
+
+@bp.route('/view', methods=['GET'])
+def dashboard_view():
+    """
+    Alternative route for dashboard view (accessible at /api/dashboard/view)
+    
+    Query Parameters:
+        range (str): Time range ('24h', '7d', '30d') - default: '24h'
+    
+    Returns:
+        Rendered HTML dashboard
+    """
+    return dashboard_html()
+
+
+@bp.route('/kpis', methods=['GET'])
+def get_dashboard_kpis():
+    """
+    Get dashboard KPIs as JSON (for AJAX refresh)
+    
+    Query Parameters:
+        range (str): Time range ('24h', '7d', '30d') - default: '24h'
+    
+    Returns:
+        JSON response with all KPI data
+    """
+    try:
+        # Get time range
+        time_range = request.args.get('range', '24h')
+        
+        # Validate
+        if time_range not in ['24h', '7d', '30d']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid time range. Must be 24h, 7d, or 30d'
+            }), 400
+        
+        # Initialize service
+        dashboard_service = DashboardService(
+            current_app.es_service,
+            current_app.mongo_service,
+            current_app.redis_service
+        )
+        
+        # Fetch KPIs
+        kpis = dashboard_service.get_kpis(time_range)
+        
+        return jsonify(kpis), 200
+    
+    except Exception as e:
+        logger.error(f"Error fetching dashboard KPIs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch KPIs',
+            'details': str(e)
+        }), 500
+
+
+@bp.route('/health', methods=['GET'])
+def get_system_health():
+    """
+    Check health status of all systems
+    
+    Returns:
+        JSON with health status
+    """
+    try:
+        dashboard_service = DashboardService(
+            current_app.es_service,
+            current_app.mongo_service,
+            current_app.redis_service
+        )
+        
+        health = dashboard_service.get_system_health()
+        
+        return jsonify({
+            'success': True,
+            'health': health
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error checking system health: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to check health'
+        }), 500
 
 
 @bp.route('/overview', methods=['GET'])
