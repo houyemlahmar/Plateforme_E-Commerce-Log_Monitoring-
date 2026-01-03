@@ -27,18 +27,24 @@ class ElasticsearchService:
         try:
             self.client = Elasticsearch(
                 [f"http://{config['host']}:{config['port']}"],
-                basic_auth=(config.get('user'), config.get('password')) if config.get('user') else None
+                basic_auth=(config.get('user'), config.get('password')) if config.get('user') else None,
+                request_timeout=2,  # Short timeout
+                max_retries=1,
+                retry_on_timeout=False
             )
             
-            # Test connection
-            if self.client.ping():
-                logger.info("Successfully connected to Elasticsearch")
-            else:
-                logger.error("Failed to connect to Elasticsearch")
+            # Test connection non-blocking
+            try:
+                if self.client.ping():
+                    logger.info("Successfully connected to Elasticsearch")
+                else:
+                    logger.warning("Elasticsearch ping failed, connection unavailable")
+            except Exception as ping_error:
+                logger.warning(f"Elasticsearch not available: {str(ping_error)}")
                 
         except Exception as e:
-            logger.error(f"Error initializing Elasticsearch: {str(e)}")
-            raise
+            logger.warning(f"Error initializing Elasticsearch: {str(e)}")
+            self.client = None
     
     def create_index(self, index_name, mappings=None):
         """

@@ -3,6 +3,13 @@
 {% block title %}Search Logs - E-commerce{% endblock %}
 
 {% block extra_css %}
+<script>
+    // Check authentication before page loads
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+    }
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
     .card-shadow {
@@ -285,8 +292,15 @@
     }
 
     async function loadServices() {
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        
         try {
-            const response = await fetch('/api/logs/search/services');
+            const response = await fetch('/api/logs/search/services', {
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
             const data = await response.json();
             if (data.success && data.services) {
                 services = data.services;
@@ -304,8 +318,15 @@
     }
 
     async function loadRecentSearches() {
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        
         try {
-            const response = await fetch('/api/logs/search/recent?limit=5');
+            const response = await fetch('/api/logs/search/recent?limit=5', {
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
             const data = await response.json();
             if (data.success && data.searches) displayRecentSearches(data.searches);
         } catch (error) {
@@ -357,6 +378,12 @@
             size: parseInt(document.getElementById('sizeLimit').value)
         };
         
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        
         document.getElementById('loadingIndicator').classList.remove('hidden');
         document.getElementById('noResults').classList.add('hidden');
         document.getElementById('resultsContainer').classList.add('hidden');
@@ -364,7 +391,10 @@
         try {
             const response = await fetch('/api/logs/search', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
                 body: JSON.stringify(filters)
             });
             const data = await response.json();
@@ -451,10 +481,19 @@
             size: parseInt(document.getElementById('sizeLimit').value)
         };
         const name = prompt('Enter a name for this search (optional):');
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            alert('Authentication required');
+            return;
+        }
+        
         try {
             const response = await fetch('/api/logs/search/save', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
                 body: JSON.stringify({ name, filters })
             });
             const data = await response.json();

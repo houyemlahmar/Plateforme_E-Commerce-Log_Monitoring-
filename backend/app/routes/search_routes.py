@@ -6,6 +6,7 @@ Provides search functionality across logs
 import logging
 from flask import Blueprint, request, jsonify, current_app
 from app.services.search_service import SearchService
+from app.utils.jwt_utils import token_required, role_hierarchy_required
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,11 @@ bp = Blueprint('search', __name__, url_prefix='/api/search')
 
 
 @bp.route('/', methods=['GET'])
+@token_required
+@role_hierarchy_required('viewer')
 def search_logs():
     """
-    Search logs using Elasticsearch Query Builder
+    Search logs using Elasticsearch Query Builder - Requires viewer role or higher
     
     Query Parameters:
         - q: Search query (free text)
@@ -103,9 +106,11 @@ def search_logs():
 
 
 @bp.route('/autocomplete', methods=['GET'])
+@token_required
+@role_hierarchy_required('viewer')
 def autocomplete():
     """
-    Get autocomplete suggestions
+    Get autocomplete suggestions - Requires viewer role or higher
     
     Query Parameters:
         - q: Partial query

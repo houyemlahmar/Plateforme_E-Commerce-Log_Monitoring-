@@ -7,6 +7,7 @@ import logging
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, timedelta
 from app.services.analytics_service import AnalyticsService
+from app.utils.jwt_utils import token_required, role_hierarchy_required
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,11 @@ bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 
 
 @bp.route('/transactions', methods=['GET'])
+@token_required
+@role_hierarchy_required('analyst')
 def get_transaction_analytics():
     """
-    Get transaction analytics
+    Get transaction analytics - Requires analyst role or higher
     
     Query Parameters:
         - start_date: Start date (ISO format)
@@ -51,9 +54,11 @@ def get_transaction_analytics():
 
 
 @bp.route('/errors', methods=['GET'])
+@token_required
+@role_hierarchy_required('analyst')
 def get_error_analytics():
     """
-    Get error analytics
+    Get error analytics - Requires analyst role or higher
     
     Returns:
         JSON response with error analytics
@@ -75,9 +80,11 @@ def get_error_analytics():
 
 
 @bp.route('/user-behavior', methods=['GET'])
+@token_required
+@role_hierarchy_required('analyst')
 def get_user_behavior_analytics():
     """
-    Get user behavior analytics
+    Get user behavior analytics - Requires analyst role or higher
     
     Returns:
         JSON response with user behavior analytics

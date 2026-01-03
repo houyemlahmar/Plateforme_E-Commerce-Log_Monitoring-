@@ -34,12 +34,13 @@ def main():
         logger.info(f"Starting Flask application on {host}:{port}")
         logger.info(f"Debug mode: {debug}")
         
-        # Run the application
+        # Run the application (use_reloader=False to fix Windows socket issue)
         app.run(
             host=host,
             port=port,
             debug=debug,
-            threaded=True
+            threaded=True,
+            use_reloader=False
         )
         
     except Exception as e:

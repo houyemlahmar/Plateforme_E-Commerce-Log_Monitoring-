@@ -6,6 +6,7 @@ Provides dashboard data and metrics
 import logging
 from flask import Blueprint, request, jsonify, current_app, render_template
 from app.services.dashboard_service import DashboardService
+from app.utils.jwt_utils import token_required, role_hierarchy_required
 from config import get_config
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ def kibana_view():
 def dashboard_html():
     """
     Render dashboard HTML page (accessible at /dashboard)
+    Note: Authentication is handled by JavaScript in the template
     
     Query Parameters:
         range (str): Time range ('24h', '7d', '30d') - default: '24h'
@@ -115,9 +117,11 @@ def dashboard_view():
 
 
 @bp.route('/kpis', methods=['GET'])
+@token_required
+@role_hierarchy_required('viewer')
 def get_dashboard_kpis():
     """
-    Get dashboard KPIs as JSON (for AJAX refresh)
+    Get dashboard KPIs as JSON (for AJAX refresh) - Requires viewer role or higher
     
     Query Parameters:
         range (str): Time range ('24h', '7d', '30d') - default: '24h'
@@ -188,9 +192,11 @@ def get_system_health():
 
 
 @bp.route('/overview', methods=['GET'])
+@token_required
+@role_hierarchy_required('viewer')
 def get_dashboard_overview():
     """
-    Get dashboard overview data
+    Get dashboard overview data - Requires viewer role or higher
     
     Returns:
         JSON response with dashboard overview
@@ -212,9 +218,11 @@ def get_dashboard_overview():
 
 
 @bp.route('/metrics', methods=['GET'])
+@token_required
+@role_hierarchy_required('viewer')
 def get_metrics():
     """
-    Get key metrics
+    Get key metrics - Requires viewer role or higher
     
     Returns:
         JSON response with key metrics
@@ -236,9 +244,11 @@ def get_metrics():
 
 
 @bp.route('/charts', methods=['GET'])
+@token_required
+@role_hierarchy_required('viewer')
 def get_chart_data():
     """
-    Get chart data for visualizations
+    Get chart data for visualizations - Requires viewer role or higher
     
     Query Parameters:
         - chart_type: Type of chart (transactions, errors, performance, etc.)

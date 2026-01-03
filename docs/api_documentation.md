@@ -1,65 +1,254 @@
-# API Documentation
+# Documentation API - Plateforme BigData E-Commerce
 
 ## Base URL
 
 ```
-http://localhost:5000/api
+http://localhost:5001/api
 ```
 
-## Authentication
+## 🔐 Authentification
 
-Currently, the API is open for development. In production, use JWT tokens:
+L'API utilise **JWT (JSON Web Tokens)** pour l'authentification. Tous les endpoints (sauf `/auth/login`, `/auth/register`, et `/health`) nécessitent un token d'accès valide.
 
-```http
-Authorization: Bearer <token>
+### Obtenir un Token
+
+```bash
+curl -X POST http://localhost:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"your_password"}'
 ```
 
-## Endpoints
+**Réponse** :
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "user": {
+    "id": "67a1b2c3d4e5f6g7h8i9",
+    "email": "user@example.com",
+    "username": "johndoe",
+    "role": "analyst"
+  }
+}
+```
+
+### Utiliser le Token
+
+Incluez le token dans le header `Authorization` de chaque requête :
+
+```bash
+curl -X GET http://localhost:5001/api/dashboard/stats \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+```
+
+### Rafraîchir le Token
+
+Les tokens d'accès expirent après **1 heure**. Utilisez le refresh token pour en obtenir un nouveau :
+
+```bash
+curl -X POST http://localhost:5001/api/auth/refresh \
+  -H "Authorization: Bearer YOUR_REFRESH_TOKEN"
+```
+
+### Rôles et Permissions
+
+| Rôle | Permissions |
+|------|-------------|
+| **viewer** | Consultation dashboards, recherche basique |
+| **analyst** | Viewer + upload logs, analytics, recherche avancée, export |
+| **moderator** | Analyst + gestion utilisateurs CRUD |
+| **admin** | Moderator + suppression utilisateurs, accès complet |
+
+---
+
+## 📋 Endpoints
 
 ### Health Check
 
 #### GET /health
 
-Check if the application is running.
+Vérifier si l'application est opérationnelle.
 
-**Response**
+**Authentification** : Non requise
+
+**Réponse** :
 
 ```json
 {
   "status": "healthy",
   "service": "ecommerce-logs-platform",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }
 ```
 
 ---
 
-### Logs Management
+## 🔐 Authentification
 
-#### POST /logs/upload
+### POST /auth/register
 
-Upload a log file.
+Créer un nouveau compte utilisateur.
 
-**Request**
+**Authentification** : Non requise
+
+**Request Body** :
+
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!",
+  "username": "johndoe",
+  "role": "viewer"
+}
+```
+
+**Validation** :
+- `email` : Requis, format email valide, unique
+- `password` : Requis, minimum 8 caractères
+- `username` : Optionnel, alphanumérique
+- `role` : Optionnel, défaut "viewer" (viewer|analyst|moderator|admin)
+
+**Réponse** : `201 Created`
+
+```json
+{
+  "access_token": "eyJ0eXAi...",
+  "refresh_token": "eyJ0eXAi...",
+  "user": {
+    "id": "67a1b2c3d4e5f6g7h8i9",
+    "email": "user@example.com",
+    "username": "johndoe",
+    "role": "viewer",
+    "created_at": "2024-12-25T10:30:00Z"
+  }
+}
+```
+
+### POST /auth/login
+
+Se connecter et obtenir des tokens JWT.
+
+**Authentification** : Non requise
+
+**Request Body** :
+
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "access_token": "eyJ0eXAi...",
+  "refresh_token": "eyJ0eXAi...",
+  "user": {
+    "id": "67a1b2c3d4e5f6g7h8i9",
+    "email": "user@example.com",
+    "username": "johndoe",
+    "role": "analyst"
+  }
+}
+```
+
+**Erreurs** :
+- `401 Unauthorized` : Email ou mot de passe incorrect
+- `403 Forbidden` : Compte désactivé
+
+### POST /auth/refresh
+
+Rafraîchir le token d'accès expiré.
+
+**Authentification** : Refresh token requis
+
+**Headers** :
+```
+Authorization: Bearer YOUR_REFRESH_TOKEN
+```
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "access_token": "eyJ0eXAi..."
+}
+```
+
+### POST /auth/logout
+
+Déconnecter l'utilisateur (supprime les tokens côté client).
+
+**Authentification** : Access token requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "message": "Successfully logged out"
+}
+```
+
+### GET /auth/me
+
+Récupérer les informations de l'utilisateur connecté.
+
+**Authentification** : Access token requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "id": "67a1b2c3d4e5f6g7h8i9",
+  "email": "user@example.com",
+  "username": "johndoe",
+  "role": "analyst",
+  "is_active": true,
+  "created_at": "2024-12-20T15:30:00Z",
+  "last_login": "2024-12-25T10:30:00Z"
+}
+```
+
+---
+
+## 📁 Logs Management
+
+### POST /logs/upload
+
+Uploader un fichier de logs (JSON ou CSV).
+
+**Authentification** : Analyst+ requis
+
+**Request** :
 
 - Content-Type: `multipart/form-data`
-- Body: `file` (log file)
+- Body: `file` (fichier de logs, max 100MB)
 
-**Response**
+**Réponse** : `200 OK`
 
 ```json
 {
   "message": "Logs uploaded successfully",
+  "filename": "20251225_123456_abc123_test_logs.json",
   "records_processed": 1000,
   "file_id": "507f1f77bcf86cd799439011"
 }
 ```
 
-#### POST /logs/ingest
+**Erreurs** :
+- `400 Bad Request` : Fichier manquant, extension invalide, ou taille > 100MB
+- `401 Unauthorized` : Token manquant ou invalide
+- `403 Forbidden` : Rôle insuffisant (< Analyst)
 
-Ingest logs via JSON payload.
+### POST /logs/ingest
 
-**Request**
+Ingérer des logs via payload JSON direct.
+
+**Authentification** : Analyst+ requis
+
+**Request Body** :
 
 ```json
 {
@@ -68,11 +257,13 @@ Ingest logs via JSON payload.
   "transaction_id": "TXN12345",
   "user_id": "USER123",
   "amount": 99.99,
-  "currency": "USD"
+  "currency": "USD",
+  "level": "INFO",
+  "service": "payment"
 }
 ```
 
-**Response**
+**Réponse** : `200 OK`
 
 ```json
 {
@@ -139,24 +330,554 @@ Get logs statistics.
 
 ### Analytics
 
-#### GET /analytics/transactions
+  "records_processed": 1,
+  "indexed_at": "2024-12-25T10:30:00Z"
+}
+```
 
-Get transaction analytics.
+### GET /logs/types
 
-**Query Parameters**
+Récupérer les types de logs disponibles.
 
-- `start_date` (optional): Start date (ISO format)
-- `end_date` (optional): End date (ISO format)
-- `granularity` (optional): hourly, daily, weekly, monthly
+**Authentification** : Viewer+ requis
 
-**Response**
+**Réponse** : `200 OK`
 
 ```json
 {
-  "timeline": [...],
-  "payment_methods": [...],
-  "transaction_status": [...]
+  "log_types": [
+    {
+      "id": "transaction",
+      "name": "Transaction Logs",
+      "description": "Payment, order, and refund logs"
+    },
+    {
+      "id": "error",
+      "name": "Error Logs",
+      "description": "Application errors and exceptions"
+    }
+  ]
 }
+```
+
+### GET /logs/recent
+
+Récupérer les logs récents.
+
+**Authentification** : Viewer+ requis
+
+**Query Parameters** :
+- `limit` (optionnel) : Nombre de logs (défaut: 100, max: 1000)
+- `log_type` (optionnel) : Filtrer par type
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "logs": [
+    {
+      "_id": "log_001",
+      "message": "Transaction completed",
+      "level": "INFO",
+      "service": "payment",
+      "timestamp": "2024-12-25T10:30:00Z"
+    }
+  ],
+  "count": 100
+}
+```
+
+### GET /logs/stats
+
+Récupérer les statistiques globales des logs.
+
+**Authentification** : Analyst+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "total_files": 50,
+  "total_logs": 50000,
+  "log_types": [
+    {"type": "transaction", "count": 40000},
+    {"type": "error", "count": 5000},
+    {"type": "info", "count": 5000}
+  ],
+  "timeline": [
+    {"hour": "2024-12-25T10:00:00Z", "count": 1000}
+  ]
+}
+```
+
+---
+
+## 🔍 Search & Analytics
+
+### POST /logs/search
+
+Rechercher des logs avec filtres avancés.
+
+**Authentification** : Analyst+ requis
+
+**Request Body** :
+
+```json
+{
+  "query": "payment failed",
+  "level": "ERROR",
+  "service": "payment",
+  "date_from": "2024-12-20 00:00",
+  "date_to": "2024-12-25 23:59",
+  "size": 50,
+  "from": 0
+}
+```
+
+**Paramètres** :
+- `query` (optionnel) : Recherche texte libre sur tous les champs
+- `level` (optionnel) : ERROR, WARNING, INFO, DEBUG, CRITICAL
+- `service` (optionnel) : Nom du service (payment, auth, inventory, etc.)
+- `date_from` (optionnel) : Date de début (format: YYYY-MM-DD HH:MM)
+- `date_to` (optionnel) : Date de fin (format: YYYY-MM-DD HH:MM)
+- `size` (optionnel) : Nombre de résultats (défaut: 50, max: 1000)
+- `from` (optionnel) : Offset pour pagination (défaut: 0)
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "hits": [
+    {
+      "_id": "log_001",
+      "_score": 1.234,
+      "_source": {
+        "message": "Payment gateway timeout",
+        "level": "ERROR",
+        "service": "payment",
+        "timestamp": "2024-12-25T10:30:00Z",
+        "user_id": "USER123",
+        "amount": 99.99
+      }
+    }
+  ],
+  "total": 150,
+  "took": 23
+}
+```
+
+### GET /logs/search/services
+
+Lister tous les services ayant des logs indexés.
+
+**Authentification** : Viewer+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "services": [
+    "payment",
+    "auth",
+    "inventory",
+    "shipping",
+    "notification"
+  ]
+}
+```
+
+### POST /logs/search/save
+
+Sauvegarder une recherche pour un accès rapide ultérieur.
+
+**Authentification** : Analyst+ requis
+
+**Request Body** :
+
+```json
+{
+  "name": "Erreurs Payment Hier",
+  "filters": {
+    "level": "ERROR",
+    "service": "payment",
+    "date_from": "2024-12-24 00:00",
+    "date_to": "2024-12-24 23:59"
+  }
+}
+```
+
+**Réponse** : `201 Created`
+
+```json
+{
+  "message": "Search saved successfully",
+  "search_id": "507f1f77bcf86cd799439011",
+  "name": "Erreurs Payment Hier"
+}
+```
+
+### GET /logs/search/recent
+
+Récupérer les recherches récentes de l'utilisateur.
+
+**Authentification** : Analyst+ requis
+
+**Query Parameters** :
+- `limit` (optionnel) : Nombre de recherches (défaut: 5, max: 50)
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "searches": [
+    {
+      "id": "507f1f77bcf86cd799439011",
+      "name": "Erreurs Payment Hier",
+      "filters": {...},
+      "created_at": "2024-12-25T10:30:00Z"
+    }
+  ],
+  "count": 5
+}
+```
+
+---
+
+## 📊 Analytics & Dashboard
+
+### GET /dashboard/stats
+
+Récupérer les statistiques du dashboard (KPIs).
+
+**Authentification** : Viewer+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "total_logs": 50000,
+  "error_rate": 5.2,
+  "avg_response_time": 245,
+  "active_services": 8,
+  "growth_percentage": 12.5
+}
+```
+
+### GET /analytics/logs-per-hour
+
+Récupérer le nombre de logs par heure sur les dernières 24h.
+
+**Authentification** : Analyst+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "data": [
+    {"hour": "2024-12-25T00:00:00Z", "count": 1000, "errors": 50},
+    {"hour": "2024-12-25T01:00:00Z", "count": 950, "errors": 40}
+  ]
+}
+```
+
+### GET /analytics/top-countries
+
+Récupérer le top 10 des pays par nombre de logs.
+
+**Authentification** : Analyst+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "countries": [
+    {"country": "United States", "count": 15000},
+    {"country": "France", "count": 8000},
+    {"country": "Germany", "count": 5000}
+  ]
+}
+```
+
+### GET /analytics/top-products
+
+Récupérer le top 10 des produits par volume de transactions.
+
+**Authentification** : Analyst+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "products": [
+    {"product_id": "PROD001", "name": "Laptop", "count": 500, "revenue": 499500},
+    {"product_id": "PROD002", "name": "Smartphone", "count": 800, "revenue": 399200}
+  ]
+}
+```
+
+### GET /analytics/transactions
+
+Get transaction analytics.
+
+**Authentification** : Analyst+ requis
+
+**Query Parameters** :
+- `start_date` (optionnel) : Date de début (format ISO: 2024-12-20T00:00:00Z)
+- `end_date` (optionnel) : Date de fin (format ISO: 2024-12-25T23:59:59Z)
+- `granularity` (optionnel) : hourly, daily, weekly, monthly (défaut: daily)
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "timeline": [
+    {"date": "2024-12-25", "count": 1000, "amount": 99900}
+  ],
+  "payment_methods": [
+    {"method": "credit_card", "count": 600, "amount": 59940},
+    {"method": "paypal", "count": 400, "amount": 39960}
+  ],
+  "transaction_status": [
+    {"status": "completed", "count": 950},
+    {"status": "failed", "count": 50}
+  ]
+}
+```
+
+---
+
+## 👥 User Management
+
+### GET /users
+
+Lister tous les utilisateurs.
+
+**Authentification** : Moderator+ requis
+
+**Query Parameters** :
+- `role` (optionnel) : Filtrer par rôle (viewer|analyst|moderator|admin)
+- `is_active` (optionnel) : Filtrer par statut (true|false)
+- `limit` (optionnel) : Nombre d'utilisateurs (défaut: 50, max: 200)
+- `skip` (optionnel) : Offset pour pagination (défaut: 0)
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "users": [
+    {
+      "id": "67a1b2c3d4e5f6g7h8i9",
+      "email": "analyst@example.com",
+      "username": "john_analyst",
+      "role": "analyst",
+      "is_active": true,
+      "created_at": "2024-12-20T15:30:00Z",
+      "last_login": "2024-12-25T10:30:00Z"
+    }
+  ],
+  "total": 15,
+  "count": 10
+}
+```
+
+### GET /users/:user_id
+
+Récupérer un utilisateur spécifique.
+
+**Authentification** : Moderator+ requis
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "id": "67a1b2c3d4e5f6g7h8i9",
+  "email": "analyst@example.com",
+  "username": "john_analyst",
+  "role": "analyst",
+  "is_active": true,
+  "created_at": "2024-12-20T15:30:00Z",
+  "last_login": "2024-12-25T10:30:00Z",
+  "stats": {
+    "uploads_count": 25,
+    "searches_count": 150
+  }
+}
+```
+
+### PUT /users/:user_id
+
+Modifier un utilisateur.
+
+**Authentification** : Moderator+ requis
+
+**Request Body** :
+
+```json
+{
+  "role": "analyst",
+  "is_active": true,
+  "username": "new_username"
+}
+```
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "message": "User updated successfully",
+  "user": {
+    "id": "67a1b2c3d4e5f6g7h8i9",
+    "email": "analyst@example.com",
+    "username": "new_username",
+    "role": "analyst",
+    "is_active": true
+  }
+}
+```
+
+**Erreurs** :
+- `403 Forbidden` : Tentative de modification d'un utilisateur avec rôle supérieur
+- `404 Not Found` : Utilisateur inexistant
+
+### DELETE /users/:user_id
+
+Supprimer un utilisateur (soft delete).
+
+**Authentification** : Admin uniquement
+
+**Réponse** : `200 OK`
+
+```json
+{
+  "message": "User deleted successfully",
+  "user_id": "67a1b2c3d4e5f6g7h8i9"
+}
+```
+
+**Erreurs** :
+- `403 Forbidden` : Seuls les Admins peuvent supprimer des utilisateurs
+- `404 Not Found` : Utilisateur inexistant
+
+---
+
+## ❌ Codes d'Erreur
+
+| Code | Description | Solution |
+|------|-------------|----------|
+| `400` | Bad Request | Vérifiez la syntaxe et les paramètres |
+| `401` | Unauthorized | Token manquant, invalide ou expiré → reconnectez-vous |
+| `403` | Forbidden | Permissions insuffisantes → vérifiez votre rôle |
+| `404` | Not Found | Ressource inexistante |
+| `409` | Conflict | Email déjà utilisé (inscription) |
+| `413` | Payload Too Large | Fichier > 100MB |
+| `422` | Unprocessable Entity | Validation échouée |
+| `429` | Too Many Requests | Rate limit atteint → attendez 1 minute |
+| `500` | Internal Server Error | Erreur serveur → contactez l'admin |
+
+---
+
+## 🔒 Sécurité
+
+### Bonnes Pratiques
+
+1. **Tokens** :
+   - Ne partagez JAMAIS vos tokens
+   - Stockez les tokens de manière sécurisée (localStorage, non accessible en JS externe)
+   - Utilisez HTTPS en production
+
+2. **Rate Limiting** :
+   - Maximum 100 requêtes / minute par utilisateur
+   - Maximum 10 tentatives de login échouées / 15 minutes
+
+3. **Validation** :
+   - Tous les inputs sont validés côté serveur
+   - Sanitization automatique des noms de fichiers
+   - Taille maximale des payloads JSON : 10MB
+
+4. **CORS** :
+   - Configuré pour `http://localhost:5001` uniquement
+   - En production, configurez les origines autorisées dans `.env`
+
+---
+
+## 📖 Exemples Complets
+
+### Workflow Complet : Upload et Recherche
+
+```bash
+# 1. Se connecter
+TOKEN=$(curl -s -X POST http://localhost:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"analyst@example.com","password":"password123"}' | jq -r '.access_token')
+
+# 2. Uploader un fichier
+curl -X POST http://localhost:5001/api/logs/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@test_logs.json"
+
+# 3. Rechercher des erreurs payment
+curl -X POST http://localhost:5001/api/logs/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "level": "ERROR",
+    "service": "payment",
+    "date_from": "2024-12-24 00:00",
+    "date_to": "2024-12-25 23:59"
+  }' | jq
+
+# 4. Sauvegarder la recherche
+curl -X POST http://localhost:5001/api/logs/search/save \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Erreurs Payment Hier",
+    "filters": {
+      "level": "ERROR",
+      "service": "payment"
+    }
+  }'
+```
+
+### Workflow Gestion Utilisateurs
+
+```bash
+# 1. Se connecter en tant qu'Admin
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"admin_pass"}' | jq -r '.access_token')
+
+# 2. Lister tous les utilisateurs
+curl -X GET http://localhost:5001/api/users \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq
+
+# 3. Créer un nouvel utilisateur
+curl -X POST http://localhost:5001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newuser@example.com",
+    "password": "SecurePass123!",
+    "username": "newuser",
+    "role": "analyst"
+  }' | jq
+
+# 4. Modifier un utilisateur
+curl -X PUT http://localhost:5001/api/users/67a1b2c3d4e5f6g7h8i9 \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"role":"moderator","is_active":true}' | jq
+
+# 5. Désactiver un utilisateur
+curl -X PUT http://localhost:5001/api/users/67a1b2c3d4e5f6g7h8i9 \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_active":false}' | jq
+```
+
+---
+
+**Version API** : 2.0.0 (avec authentification JWT)  
+**Documentation mise à jour** : Décembre 2024
 ```
 
 #### GET /analytics/errors

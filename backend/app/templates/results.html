@@ -3,6 +3,13 @@
 {% block title %}Search Results - E-commerce Logs{% endblock %}
 
 {% block extra_css %}
+<script>
+    // Check authentication before page loads
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+    }
+</script>
 <style>
     .card-shadow {
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
@@ -186,6 +193,12 @@
     });
 
     async function fetchResults() {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        
         const urlParams = new URLSearchParams(window.location.search);
         const filters = {
             query: urlParams.get('query') || '',
@@ -201,7 +214,10 @@
         try {
             const response = await fetch('/api/logs/search', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
                 body: JSON.stringify(filters)
             });
             const data = await response.json();

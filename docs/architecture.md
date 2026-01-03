@@ -2,14 +2,16 @@
 
 ## Vue d'ensemble
 
-La plateforme de monitoring et d'analyse de logs e-commerce est construite avec une architecture microservices moderne utilisant les technologies suivantes :
+La plateforme de monitoring et d'analyse de logs e-commerce est construite avec une architecture microservices moderne et sécurisée utilisant les technologies suivantes :
 
 ### Stack Technologique
 
 #### Backend
-- **Flask** : Framework web Python léger et flexible
+- **Flask 3.0** : Framework web Python léger et flexible
 - **Python 3.11** : Langage de programmation principal
 - **Gunicorn** : Serveur WSGI pour la production
+- **PyJWT 2.8.0** : 🔐 Authentification JWT (JSON Web Tokens)
+- **bcrypt** : 🔐 Hachage sécurisé des mots de passe (12 rounds)
 
 #### Stack ELK
 - **Elasticsearch 8.11** : Moteur de recherche et d'indexation
@@ -17,37 +19,54 @@ La plateforme de monitoring et d'analyse de logs e-commerce est construite avec 
 - **Kibana 8.11** : Interface de visualisation
 
 #### Bases de données
-- **MongoDB 7.0** : Stockage des métadonnées
-- **Redis 7** : Cache et gestion de sessions
+- **MongoDB 7.0** : Stockage des métadonnées + 🔐 collection users
+- **Redis 7.2** : Cache, sessions et queue jobs
 
 #### Conteneurisation
 - **Docker** : Conteneurisation des services
-- **Docker Compose** : Orchestration multi-conteneurs
+- **Docker Compose** : Orchestration multi-conteneurs (8 services)
 
 ## Architecture des Services
 
 ### 1. Application Flask (Backend)
 
-L'application Flask est organisée selon les principes de la clean architecture :
+L'application Flask est organisée selon les principes de la clean architecture avec couche de sécurité JWT :
 
 ```
 backend/
 ├── app/
-│   ├── routes/          # Endpoints API
-│   ├── services/        # Logique métier
-│   ├── models/          # Modèles de données
-│   └── utils/           # Utilitaires
-├── config.py            # Configuration
+│   ├── routes/          # 7 modules de routes API
+│   │   ├── auth_routes.py      # 🔐 11 endpoints authentification
+│   │   ├── user_routes.py      # 🔐 CRUD utilisateurs
+│   │   ├── log_routes.py       # Upload & ingestion
+│   │   ├── analytics_routes.py # Métriques agrégées
+│   │   ├── dashboard_routes.py # Stats et visualisations
+│   │   ├── fraud_routes.py     # Détection fraude
+│   │   └── search_routes.py    # Recherche avancée
+│   ├── services/        # 10 services métier
+│   │   ├── auth_service.py     # 🔐 Login & tokens
+│   │   ├── user_repository.py  # 🔐 MongoDB users
+│   │   └── ...
+│   ├── models/          # 4 modèles de données
+│   │   ├── user.py             # 🔐 User model avec rôles
+│   │   └── ...
+│   ├── utils/           # 4 modules utilitaires
+│   │   ├── jwt_utils.py        # 🔐 Decorators JWT
+│   │   └── ...
+│   └── templates/       # 8 templates HTML avec auth JS
+├── config.py            # 🔐 Configuration (JWT, MongoDB, etc.)
 └── main.py              # Point d'entrée
 ```
 
 #### Routes API
 
-- **/api/logs** : Gestion des logs (upload, ingestion, recherche)
-- **/api/analytics** : Analyses et métriques
-- **/api/dashboard** : Données pour le tableau de bord
-- **/api/fraud** : Détection de fraude
-- **/api/performance** : Métriques de performance
+- 🔐 **/api/auth** : Authentification JWT (login, register, refresh, logout, me)
+- 🔐 **/api/users** : Gestion utilisateurs (CRUD avec contrôle de rôle)
+- **/api/logs** : Gestion des logs (upload, ingestion, recherche) [Analyst+]
+- **/api/analytics** : Analyses et métriques [Analyst+]
+- **/api/dashboard** : Données pour le tableau de bord [Viewer+]
+- **/api/fraud** : Détection de fraude [Analyst+]
+- **/api/search** : Recherche avancée avec sauvegarde [Analyst+]
 - **/api/search** : Recherche avancée
 
 #### Services

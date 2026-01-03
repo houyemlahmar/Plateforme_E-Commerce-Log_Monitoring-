@@ -3,6 +3,13 @@
 {% block title %}Upload Logs - E-commerce Platform{% endblock %}
 
 {% block extra_css %}
+<script>
+    // Check authentication before page loads
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+    }
+</script>
 <style>
     .drag-active {
         border-color: #667eea !important;
@@ -332,6 +339,12 @@
     async function uploadFile() {
         if (!selectedFile) return;
         
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        
         clearMessages();
         disableUploadButton();
         showProgress();
@@ -342,6 +355,9 @@
         try {
             const response = await fetch('/api/logs/upload', {
                 method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
                 body: formData
             });
             
@@ -425,8 +441,15 @@
     
     // Load Recent Uploads
     async function loadRecentUploads() {
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        
         try {
-            const response = await fetch('/api/logs/uploads/recent?limit=10');
+            const response = await fetch('/api/logs/uploads/recent?limit=10', {
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
             const data = await response.json();
             
             if (data.success && data.uploads && data.uploads.length > 0) {

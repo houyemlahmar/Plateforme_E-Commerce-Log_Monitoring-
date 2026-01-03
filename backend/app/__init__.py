@@ -4,8 +4,9 @@ Creates and configures the Flask application
 """
 
 import logging
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template, redirect
 from flask_cors import CORS
+from flasgger import Swagger
 from config import get_config
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,69 @@ def create_app(config_name=None):
     # Enable CORS
     CORS(app, origins=config.CORS_ORIGINS)
     
+    # Configure Swagger
+    swagger_config = {
+        "headers": [],
+        "specs": [
+            {
+                "endpoint": 'apispec',
+                "route": '/apispec.json',
+                "rule_filter": lambda rule: True,
+                "model_filter": lambda tag: True,
+            }
+        ],
+        "static_url_path": "/flasgger_static",
+        "swagger_ui": True,
+        "specs_route": "/api/docs"
+    }
+    
+    swagger_template = {
+        "swagger": "2.0",
+        "info": {
+            "title": "E-Commerce Logs Platform API",
+            "description": "API sécurisée avec JWT pour la gestion et l'analyse de logs e-commerce. Plateforme complète de monitoring avec Elasticsearch, MongoDB et Redis.",
+            "version": "2.0.0",
+            "contact": {
+                "name": "API Support",
+                "email": "support@ecommerce-logs.com"
+            }
+        },
+        "host": "localhost:5001",
+        "basePath": "/",
+        "schemes": ["http", "https"],
+        "securityDefinitions": {
+            "Bearer": {
+                "type": "apiKey",
+                "name": "Authorization",
+                "in": "header",
+                "description": "JWT Authorization header using the Bearer scheme. Example: 'Bearer {token}'"
+            }
+        },
+        "security": [
+            {"Bearer": []}
+        ],
+        "tags": [
+            {
+                "name": "Authentication",
+                "description": "Endpoints d'authentification JWT (login, register, refresh)"
+            },
+            {
+                "name": "Logs",
+                "description": "Endpoints de gestion des logs (upload, search, retrieve)"
+            },
+            {
+                "name": "Analytics",
+                "description": "Endpoints d'analytics et métriques"
+            },
+            {
+                "name": "Dashboard",
+                "description": "Endpoints pour dashboard et visualisations"
+            }
+        ]
+    }
+    
+    Swagger(app, config=swagger_config, template=swagger_template)
+    
     # Configure logging
     logging.basicConfig(
         level=getattr(logging, config.LOG_LEVEL),
@@ -45,25 +109,23 @@ def create_app(config_name=None):
     # Initialize extensions
     initialize_extensions(app)
     
-    # Root endpoint
+    # Root endpoint - redirect to login
     @app.route('/', methods=['GET'])
     def root():
-        """Root endpoint with API information"""
-        return jsonify({
-            'service': 'E-Commerce Logs Platform',
-            'version': '1.0.0',
-            'status': 'running',
-            'endpoints': {
-                'health': '/health',
-                'logs': '/api/logs',
-                'analytics': '/api/analytics',
-                'dashboard': '/api/dashboard',
-                'fraud': '/api/fraud',
-                'performance': '/api/performance',
-                'search': '/api/search'
-            },
-            'documentation': 'See /docs for API documentation'
-        }), 200
+        """Root endpoint - redirect to login"""
+        return redirect('/login')
+    
+    # Login page
+    @app.route('/login', methods=['GET'])
+    def login_page():
+        """Render login page"""
+        return render_template('login.html')
+    
+    # Profile page
+    @app.route('/profile', methods=['GET'])
+    def profile_page():
+        """Render profile page"""
+        return render_template('profile.html')
     
     # Health check endpoint
     @app.route('/health', methods=['GET'])
@@ -87,7 +149,8 @@ def register_blueprints(app):
         dashboard_routes,
         fraud_routes,
         performance_routes,
-        search_routes
+        search_routes,
+        auth_routes
     )
     
     app.register_blueprint(logs_routes.bp)
@@ -99,6 +162,7 @@ def register_blueprints(app):
     app.register_blueprint(fraud_routes.bp)
     app.register_blueprint(performance_routes.bp)
     app.register_blueprint(search_routes.bp)
+    app.register_blueprint(auth_routes.bp)
     
     logger.info("Blueprints registered successfully")
 
@@ -128,24 +192,33 @@ def register_error_handlers(app):
 
 def initialize_extensions(app):
     """Initialize Flask extensions and database connections"""
+    # Initialize Elasticsearch connection (optional)
     try:
-        # Initialize Elasticsearch connection
         from app.services.elasticsearch_service import ElasticsearchService
         es_service = ElasticsearchService(app.config['ELASTICSEARCH_CONFIG'])
         app.es_service = es_service
-        
-        # Initialize MongoDB connection
+    except Exception as e:
+        logger.warning(f"Elasticsearch not available: {str(e)}")
+        app.es_service = None
+    
+    # Initialize MongoDB connection (required for auth)
+    try:
         from app.services.mongodb_service import MongoDBService
         mongo_service = MongoDBService(app.config['MONGODB_CONFIG'])
+        if mongo_service.client is None:
+            logger.warning("MongoDB not connected - authentication features will not work")
         app.mongo_service = mongo_service
-        
-        # Initialize Redis connection
+    except Exception as e:
+        logger.warning(f"Failed to initialize MongoDB: {str(e)}")
+        app.mongo_service = None
+    
+    # Initialize Redis connection (optional)
+    try:
         from app.services.redis_service import RedisService
         redis_service = RedisService(app.config['REDIS_CONFIG'])
         app.redis_service = redis_service
-        
-        logger.info("Extensions initialized successfully")
-        
     except Exception as e:
-        logger.error(f"Failed to initialize extensions: {str(e)}")
-        raise
+        logger.warning(f"Redis not available: {str(e)}")
+        app.redis_service = None
+    
+    logger.info("Extensions initialized successfully")

@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify, current_app, render_template
 from werkzeug.utils import secure_filename
 from app.services.log_service import LogService
 from app.utils.validators import validate_log_file, validate_log_data
+from app.utils.jwt_utils import token_required, role_hierarchy_required
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +55,88 @@ def upload_view():
 
 
 @bp.route('/upload', methods=['POST'])
+@token_required
+@role_hierarchy_required('analyst')
 def upload_logs():
     """
     Upload log files (CSV or JSON)
-    - File validation (size, extension csv/json)
-    - Save file to /uploads
-    - Extract first 10 lines for preview
-    - Insert metadata into MongoDB collection "uploads"
-    - Push job ID into Redis queue "ingest_jobs"
-    
-    Returns:
-        JSON response with upload status, preview, and job ID
+    ---
+    tags:
+      - Logs
+    security:
+      - Bearer: []
+    consumes:
+      - multipart/form-data
+    parameters:
+      - name: file
+        in: formData
+        type: file
+        required: true
+        description: Log file (CSV or JSON format, max 100MB)
+    responses:
+      201:
+        description: File uploaded successfully
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "File uploaded successfully"
+            data:
+              type: object
+              properties:
+                file_id:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+                job_id:
+                  type: string
+                  example: "job_123456"
+                filename:
+                  type: string
+                  example: "logs_20260103.json"
+                file_size:
+                  type: integer
+                  example: 1048576
+                file_type:
+                  type: string
+                  example: "json"
+                preview:
+                  type: array
+                  items:
+                    type: object
+                  description: "First 10 lines preview"
+                preview_lines:
+                  type: integer
+                  example: 10
+                total_lines:
+                  type: integer
+                  example: 1000
+                uploaded_at:
+                  type: string
+                  example: "2026-01-03T10:30:00Z"
+      400:
+        description: Validation error
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            error:
+              type: string
+              example: "Invalid file format"
+            message:
+              type: string
+              example: "Only CSV and JSON files are allowed"
+      401:
+        description: Unauthorized - Missing or invalid token
+      403:
+        description: Forbidden - Insufficient permissions (requires Analyst role)
+      500:
+        description: Internal server error
     """
     try:
         # Check if file is present
@@ -139,6 +211,81 @@ def upload_logs():
             'success': False,
             'error': 'Internal server error',
             'message': 'Failed to upload logs'
+        }), 500
+
+
+@bp.route('/<log_id>', methods=['GET'])
+def get_log_by_id(log_id):
+    """
+    Get a specific log by ID
+    ---
+    tags:
+      - Logs
+    parameters:
+      - name: log_id
+        in: path
+        type: string
+        required: true
+        description: Log document ID
+        example: "log_12345abc"
+    responses:
+      200:
+        description: Log details
+        schema:
+          type: object
+          properties:
+            _id:
+              type: string
+              example: "log_12345abc"
+            _source:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Transaction completed successfully"
+                level:
+                  type: string
+                  example: "INFO"
+                service:
+                  type: string
+                  example: "payment"
+                timestamp:
+                  type: string
+                  example: "2026-01-03T10:30:00Z"
+                user_id:
+                  type: string
+                  example: "USER123"
+                amount:
+                  type: number
+                  example: 99.99
+      404:
+        description: Log not found
+      500:
+        description: Internal server error
+    """
+    try:
+        log_service = LogService(
+            current_app.es_service,
+            current_app.mongo_service,
+            current_app.redis_service
+        )
+        
+        # Get log from Elasticsearch
+        log = log_service.get_log_by_id(log_id)
+        
+        if log is None:
+            return jsonify({
+                'error': 'Log not found',
+                'message': f'No log found with ID: {log_id}'
+            }), 404
+        
+        return jsonify(log), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching log by ID {log_id}: {str(e)}")
+        return jsonify({
+            'error': 'Failed to fetch log',
+            'message': 'Internal server error'
         }), 500
 
 
@@ -388,93 +535,141 @@ def results_page():
 @bp.route('/search', methods=['POST'])
 def search_logs():
     """
-    Search logs with filters
-    
-    Request Body:
-        {
-            "query": "search text",
-            "level": "ERROR",
-            "service": "payment",
-            "date_from": "2025-12-25 00:00",
-            "date_to": "2025-12-25 23:59",
-            "size": 100
-        }
-    
-    Returns:
-        JSON response with search results
+    Search logs with advanced filters
+    ---
+    tags:
+      - Logs
+    parameters:
+      - name: body
+        in: body
+        required: true
+        description: Search filters
+        schema:
+          type: object
+          properties:
+            query:
+              type: string
+              description: Full-text search query
+              example: "payment failed"
+            level:
+              type: string
+              description: Log level filter
+              enum: [ERROR, WARNING, INFO, DEBUG, CRITICAL]
+              example: "ERROR"
+            service:
+              type: string
+              description: Service name filter
+              example: "payment"
+            date_from:
+              type: string
+              description: Start date (format YYYY-MM-DD HH:MM)
+              example: "2026-01-01 00:00"
+            date_to:
+              type: string
+              description: End date (format YYYY-MM-DD HH:MM)
+              example: "2026-01-03 23:59"
+            size:
+              type: integer
+              description: Number of results to return
+              default: 100
+              example: 50
+            from:
+              type: integer
+              description: Offset for pagination
+              default: 0
+              example: 0
+    responses:
+      200:
+        description: Search results
+        schema:
+          type: object
+          properties:
+            hits:
+              type: array
+              items:
+                type: object
+                properties:
+                  _id:
+                    type: string
+                    example: "log_001"
+                  _score:
+                    type: number
+                    example: 1.234
+                  _source:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Payment gateway timeout"
+                      level:
+                        type: string
+                        example: "ERROR"
+                      service:
+                        type: string
+                        example: "payment"
+                      timestamp:
+                        type: string
+                        example: "2026-01-03T10:30:00Z"
+            total:
+              type: integer
+              description: Total number of matching logs
+              example: 150
+            took:
+              type: integer
+              description: Query execution time in milliseconds
+              example: 23
+      400:
+        description: Invalid request parameters
+      500:
+        description: Internal server error
     """
     try:
+        from app.services.search_service import SearchService
+        
         filters = request.get_json()
         
-        # Build Elasticsearch query
-        query = {
-            "query": {
-                "bool": {
-                    "must": []
-                }
-            },
-            "size": filters.get('size', 100),
-            "sort": [{"@timestamp": {"order": "desc"}}]
-        }
+        # Use SearchService with Redis caching
+        search_service = SearchService(
+            current_app.es_service,
+            current_app.redis_service,
+            current_app.mongo_service
+        )
         
-        # Add text search if provided
-        if filters.get('query'):
-            query["query"]["bool"]["must"].append({
-                "multi_match": {
-                    "query": filters['query'],
-                    "fields": ["message", "service", "event.original"],
-                    "type": "best_fields"
-                }
-            })
+        # Extract parameters
+        query_text = filters.get('query')
+        level = filters.get('level')
+        service = filters.get('service')
+        date_from = filters.get('date_from')
+        date_to = filters.get('date_to')
+        size = filters.get('size', 100)
+        from_offset = filters.get('from', 0)
         
-        # Add level filter
-        if filters.get('level'):
-            query["query"]["bool"]["must"].append({
-                "match": {"level": filters['level']}
-            })
+        # Calculate page from offset
+        page = (from_offset // size) + 1 if size > 0 else 1
         
-        # Add service filter
-        if filters.get('service'):
-            query["query"]["bool"]["must"].append({
-                "match": {"service": filters['service']}
-            })
+        # Execute search with caching
+        search_results = search_service.search(
+            query=query_text,
+            level=level,
+            service=service,
+            start_date=date_from,
+            end_date=date_to,
+            page=page,
+            size=size,
+            user_ip=request.remote_addr
+        )
         
-        # Add date range filter
-        if filters.get('date_from') or filters.get('date_to'):
-            date_range = {}
-            if filters.get('date_from'):
-                # Convert to ISO format: "2025-12-24 22:03" -> "2025-12-24T22:03:00"
-                date_from = filters['date_from'].replace(' ', 'T')
-                if len(date_from) == 16:  # Format: "2025-12-24T22:03"
-                    date_from += ":00"
-                date_range['gte'] = date_from
-            if filters.get('date_to'):
-                # Convert to ISO format: "2025-12-24 22:03" -> "2025-12-24T22:03:59"
-                date_to = filters['date_to'].replace(' ', 'T')
-                if len(date_to) == 16:  # Format: "2025-12-24T22:03"
-                    date_to += ":59"
-                date_range['lte'] = date_to
-            
-            query["query"]["bool"]["must"].append({
-                "range": {"@timestamp": date_range}
-            })
-        
-        # If no filters, match all
-        if not query["query"]["bool"]["must"]:
-            query["query"] = {"match_all": {}}
-        
-        # Execute search
-        result = current_app.es_service.search('logs', query)
-        
-        # Extract results
-        hits = result.get('hits', {}).get('hits', [])
-        results = [hit['_source'] for hit in hits]
+        # Format response to maintain backward compatibility
+        results = [result['source'] for result in search_results['results']]
         
         return jsonify({
             'success': True,
             'results': results,
-            'total': result.get('hits', {}).get('total', {}).get('value', 0),
-            'count': len(results)
+            'total': search_results['total'],
+            'count': len(results),
+            'cached': search_results.get('cached', False),
+            'page': search_results['page'],
+            'total_pages': search_results['total_pages']
         }), 200
         
     except Exception as e:

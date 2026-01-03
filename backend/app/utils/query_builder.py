@@ -184,16 +184,13 @@ class ElasticsearchQueryBuilder:
         text_clean = self._sanitize_search_text(text)
         
         if text_clean:
-            # Multi-field search with boosting
+            # Multi-field search with boosting (only text fields)
             self.query["query"]["bool"]["must"].append({
                 "multi_match": {
                     "query": text_clean,
                     "fields": [
                         "message^3",           # Boost message field
                         "error_message^2",     # Boost error messages
-                        "user_id",
-                        "transaction_id",
-                        "order_id",
                         "endpoint",
                         "service",
                         "action",
@@ -210,9 +207,7 @@ class ElasticsearchQueryBuilder:
             self.query["highlight"] = {
                 "fields": {
                     "message": {},
-                    "error_message": {},
-                    "user_id": {},
-                    "transaction_id": {}
+                    "error_message": {}
                 },
                 "pre_tags": ["<mark>"],
                 "post_tags": ["</mark>"]
@@ -326,9 +321,17 @@ class ElasticsearchQueryBuilder:
         
         user_id_clean = sanitize_string(user_id, max_length=100)
         if user_id_clean:
-            self.query["query"]["bool"]["filter"].append({
-                "term": {"user_id.keyword": user_id_clean}
-            })
+            # Try to convert to int if it's numeric (user_id might be long type)
+            try:
+                user_id_value = int(user_id_clean)
+                self.query["query"]["bool"]["filter"].append({
+                    "term": {"user_id": user_id_value}
+                })
+            except ValueError:
+                # If not numeric, treat as keyword field
+                self.query["query"]["bool"]["filter"].append({
+                    "term": {"user_id.keyword": user_id_clean}
+                })
             logger.debug(f"Added user_id filter: {user_id_clean}")
         
         return self

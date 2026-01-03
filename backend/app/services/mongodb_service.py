@@ -25,25 +25,33 @@ class MongoDBService:
         try:
             # Use URI if provided, otherwise construct from components
             if config.get('uri'):
-                self.client = MongoClient(config['uri'])
+                self.client = MongoClient(
+                    config['uri'],
+                    serverSelectionTimeoutMS=2000  # Short timeout
+                )
             else:
                 self.client = MongoClient(
                     host=config.get('host', 'localhost'),
                     port=config.get('port', 27017),
                     username=config.get('user'),
                     password=config.get('password'),
-                    authSource='admin'
+                    authSource='admin',
+                    serverSelectionTimeoutMS=2000  # Short timeout
                 )
             
             self.db = self.client[config.get('database', 'ecommerce_logs')]
             
-            # Test connection
-            self.client.server_info()
-            logger.info("Successfully connected to MongoDB")
-            
+            # Test connection with timeout
+            try:
+                self.client.server_info()
+                logger.info("Successfully connected to MongoDB")
+            except PyMongoError as conn_error:
+                logger.warning(f"MongoDB not available: {str(conn_error)}")
+                
         except PyMongoError as e:
-            logger.error(f"Error connecting to MongoDB: {str(e)}")
-            raise
+            logger.warning(f"Error initializing MongoDB: {str(e)}")
+            self.client = None
+            self.db = None
     
     def insert_one(self, collection_name, document):
         """

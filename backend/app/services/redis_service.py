@@ -115,6 +115,35 @@ class RedisService:
             logger.error(f"Error deleting cache: {str(e)}")
             return False
     
+    def delete_pattern(self, pattern):
+        """
+        Delete all keys matching a pattern
+        
+        Args:
+            pattern: Redis key pattern (e.g., 'search:*')
+        
+        Returns:
+            int: Number of keys deleted
+        """
+        try:
+            deleted_count = 0
+            cursor = 0
+            
+            # Use SCAN to iterate through keys matching pattern
+            while True:
+                cursor, keys = self.client.scan(cursor, match=pattern, count=100)
+                if keys:
+                    deleted_count += self.client.delete(*keys)
+                if cursor == 0:
+                    break
+            
+            logger.info(f"Deleted {deleted_count} keys matching pattern: {pattern}")
+            return deleted_count
+            
+        except RedisError as e:
+            logger.error(f"Error deleting keys by pattern: {str(e)}")
+            return 0
+    
     def exists(self, key):
         """
         Check if key exists

@@ -145,6 +145,10 @@ class LogService:
             self.redis_service.lpush('ingest_jobs', json.dumps(job_data))
             logger.info(f"Job {job_id} pushed to ingest_jobs queue")
             
+            # Invalidate search cache on new upload
+            self.redis_service.delete_pattern('search:*')
+            logger.info("Invalidated all search caches due to new upload")
+            
             return {
                 'file_id': str(file_id),
                 'job_id': job_id,
@@ -217,6 +221,8 @@ class LogService:
             # Invalidate cache
             self.redis_service.delete('logs:recent')
             self.redis_service.delete('logs:stats')
+            self.redis_service.delete_pattern('search:*')
+            logger.info("Invalidated caches (recent, stats, search) due to new logs")
             
             return {
                 'records_processed': indexed_count,
@@ -255,6 +261,8 @@ class LogService:
             # Invalidate cache
             self.redis_service.delete('logs:recent')
             self.redis_service.delete('logs:stats')
+            self.redis_service.delete_pattern('search:*')
+            logger.info("Invalidated caches (recent, stats, search) due to log ingestion")
             
             return {
                 'records_processed': indexed_count
@@ -368,4 +376,37 @@ class LogService:
             
         except Exception as e:
             logger.error(f"Error getting logs statistics: {str(e)}")
+            raise    
+    def get_log_by_id(self, log_id):
+        """
+        Get a specific log by ID from Elasticsearch
+        
+        Args:
+            log_id: Log document ID
+        
+        Returns:
+            dict: Log document or None if not found
+        """
+        try:
+            if not self.es_service:
+                raise ValueError("Elasticsearch service not available")
+            
+            # Get document from Elasticsearch
+            result = self.es_service.client.get(
+                index='logs-ecom-*',
+                id=log_id,
+                ignore=[404]
+            )
+            
+            if not result or not result.get('found'):
+                return None
+            
+            return {
+                '_id': result['_id'],
+                '_index': result.get('_index'),
+                '_source': result.get('_source', {})
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting log by ID {log_id}: {str(e)}")
             raise
